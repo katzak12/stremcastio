@@ -1,0 +1,10 @@
+name = "subcast-relay"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+# Optional: enables POST /upload (needed for subtitle files that only exist on
+# the phone). Create it with:  npx wrangler kv namespace create SUBS
+# and paste the id below, then uncomment.
+# [[kv_namespaces]]
+# binding = "SUBS"
+# id = "<your-kv-namespace-id>"

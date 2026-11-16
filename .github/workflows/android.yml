@@ -1,0 +1,84 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths: ['app/**', '.github/workflows/android.yml']
+  pull_request:
+    paths: ['app/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Bake in the default subtitle relay
+        if: ${{ vars.RELAY_URL != '' }}
+        env:
+          RELAY_URL: ${{ vars.RELAY_URL }}
+        run: |
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('app.json','utf8'));c.expo.extra.relayUrl=process.env.RELAY_URL;fs.writeFileSync('app.json',JSON.stringify(c,null,2))"
+
+      - name: Generate native project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Use release keystore (optional)
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          cat >> android/gradle.properties <<PROPS
+          SUBCAST_STORE_FILE=release.keystore
+          SUBCAST_STORE_PASSWORD=$KEYSTORE_PASSWORD
+          SUBCAST_KEY_ALIAS=$KEY_ALIAS
+          SUBCAST_KEY_PASSWORD=$KEY_PASSWORD
+          PROPS
+          node scripts/use-release-signing.js
+
+      - name: Build APK
+        working-directory: app/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename
+        run: cp android/app/build/outputs/apk/release/app-release.apk ../SubCast.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SubCast-android
+          path: SubCast.apk
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SubCast.apk

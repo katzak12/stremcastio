@@ -1,0 +1,109 @@
+{
+  "expo": {
+    "name": "SubCast",
+    "slug": "subcast",
+    "scheme": "subcast",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0E0F13",
+    "extra": {
+      "relayUrl": ""
+    },
+    "ios": {
+      "bundleIdentifier": "app.subcast",
+      "supportsTablet": true,
+      "infoPlist": {
+        "LSSupportsOpeningDocumentsInPlace": false,
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Playlist",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.m3u-playlist",
+              "public.mpeg-4",
+              "public.movie"
+            ]
+          }
+        ]
+      }
+    },
+    "android": {
+      "package": "app.subcast",
+      "adaptiveIcon": {
+        "backgroundColor": "#0E0F13",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ],
+          "data": [
+            {
+              "scheme": "http",
+              "mimeType": "video/*"
+            },
+            {
+              "scheme": "https",
+              "mimeType": "video/*"
+            }
+          ]
+        },
+        {
+          "action": "VIEW",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "content",
+              "mimeType": "video/*"
+            },
+            {
+              "scheme": "file",
+              "mimeType": "video/*"
+            },
+            {
+              "mimeType": "audio/x-mpegurl"
+            },
+            {
+              "mimeType": "application/x-mpegurl"
+            },
+            {
+              "mimeType": "application/vnd.apple.mpegurl"
+            }
+          ]
+        },
+        {
+          "action": "SEND",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "text/plain"
+            }
+          ]
+        }
+      ]
+    },
+    "plugins": [
+      [
+        "react-native-google-cast",
+        {
+          "iosStartDiscoveryAfterFirstTapOnCastButton": false,
+          "iosSuspendSessionsWhenBackgrounded": false
+        }
+      ],
+      "expo-localization"
+    ]
+  }
+}
