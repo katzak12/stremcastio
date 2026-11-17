@@ -100,7 +100,8 @@
         "react-native-google-cast",
         {
           "iosStartDiscoveryAfterFirstTapOnCastButton": false,
-          "iosSuspendSessionsWhenBackgrounded": false
+          "iosSuspendSessionsWhenBackgrounded": false,
+          "androidPlayServicesCastFrameworkVersion": "22.1.0"
         }
       ],
       "expo-localization"
