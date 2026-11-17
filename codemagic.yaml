@@ -1,0 +1,43 @@
+# Fallback iOS build on Codemagic (free tier includes macOS build minutes).
+# Connect the GitHub repo at codemagic.io, then start "iOS IPA (unsigned)".
+workflows:
+  ios-unsigned:
+    name: iOS IPA (unsigned, for AltStore / SideStore)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+    scripts:
+      - name: Install dependencies
+        script: cd app && npm ci
+      - name: Tests
+        script: cd app && npm test
+      - name: Generate native project
+        script: cd app && npx expo prebuild --platform ios
+      - name: Build (no code signing)
+        script: |
+          cd app
+          xcodebuild \
+            -workspace ios/StremCastio.xcworkspace \
+            -scheme StremCastio \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tail -40
+      - name: Package IPA
+        script: |
+          cd app
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/StremCastio.app Payload/
+          zip -qr StremCastio.ipa Payload
+    artifacts:
+      - app/StremCastio.ipa
