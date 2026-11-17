@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15-intel  # arm64 macOS runners are often capacity-limited
+    runs-on: macos-26
     defaults:
       run:
         working-directory: app
