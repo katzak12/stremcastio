@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "SubCast",
-    "slug": "subcast",
-    "scheme": "subcast",
+    "name": "StremCastio",
+    "slug": "stremcastio",
+    "scheme": "stremcastio",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -12,7 +12,7 @@
       "relayUrl": ""
     },
     "ios": {
-      "bundleIdentifier": "app.subcast",
+      "bundleIdentifier": "app.stremcastio",
       "supportsTablet": true,
       "infoPlist": {
         "LSSupportsOpeningDocumentsInPlace": false,
@@ -31,7 +31,7 @@
       }
     },
     "android": {
-      "package": "app.subcast",
+      "package": "app.stremcastio",
       "adaptiveIcon": {
         "backgroundColor": "#0E0F13",
         "foregroundImage": "./assets/android-icon-foreground.png",

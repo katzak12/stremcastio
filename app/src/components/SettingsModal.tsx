@@ -132,7 +132,7 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
             <Text style={styles.muted}>{t.relayHint}</Text>
             <TextInput
               style={styles.input}
-              placeholder="https://subcast-relay.example.workers.dev"
+              placeholder="https://stremcastio-relay.example.workers.dev"
               placeholderTextColor={colors.muted}
               autoCapitalize="none"
               autoCorrect={false}

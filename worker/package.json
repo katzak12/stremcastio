@@ -1,5 +1,5 @@
 {
-  "name": "subcast-relay",
+  "name": "stremcastio-relay",
   "private": true,
   "type": "module",
   "scripts": {

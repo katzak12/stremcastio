@@ -16,7 +16,7 @@ export type Settings = {
   autoSearch: boolean
 }
 
-const KEY = 'subcast.settings.v1'
+const KEY = 'stremcastio.settings.v1'
 
 function defaultLanguages(): string[] {
   const langs = getLocales()

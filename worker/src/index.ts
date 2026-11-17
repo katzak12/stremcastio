@@ -1,4 +1,4 @@
-// SubCast subtitle relay — a tiny Cloudflare Worker.
+// StremCastio subtitle relay — a tiny Cloudflare Worker.
 //
 // Chromecast can only show subtitles that are WebVTT *and* served with CORS
 // headers. Most subtitle sources (OpenSubtitles, Stremio add-ons) serve SRT
@@ -96,7 +96,7 @@ async function handleVtt(url: URL): Promise<Response> {
     return json({ error: 'Only http(s) sources are allowed' }, 400)
   }
   const upstream = await fetch(target.toString(), {
-    headers: { 'User-Agent': 'SubCast/1.0 (+https://github.com/)' },
+    headers: { 'User-Agent': 'StremCastio/1.0 (+https://github.com/)' },
     redirect: 'follow',
     cf: { cacheTtl: 86400, cacheEverything: true },
   } as RequestInit)
@@ -131,7 +131,7 @@ export default {
       if (url.pathname === '/upload' && req.method === 'POST') return await handleUpload(req, url, env)
       if (url.pathname.startsWith('/s/') && req.method === 'GET') return await handleStored(url.pathname, env)
       if (url.pathname === '/' || url.pathname === '/health') {
-        return json({ name: 'subcast-relay', ok: true, uploads: Boolean(env.SUBS) })
+        return json({ name: 'stremcastio-relay', ok: true, uploads: Boolean(env.SUBS) })
       }
       return json({ error: 'Not found' }, 404)
     } catch (err) {

@@ -1,5 +1,5 @@
 // Everything that can hand us a stream: Android intents (Stremio "external
-// player"), share sheets, our own subcast:// links and .m3u playlist files.
+// player"), share sheets, our own stremcastio:// links and .m3u playlist files.
 
 import * as LegacyFS from 'expo-file-system/legacy'
 import * as Linking from 'expo-linking'
@@ -26,7 +26,7 @@ async function readPlaylist(uri: string): Promise<Incoming | null> {
 
 export async function fromUrl(raw: string | null | undefined): Promise<Incoming | null> {
   if (!raw) return null
-  if (/^subcast:/i.test(raw)) {
+  if (/^stremcastio:/i.test(raw)) {
     const parsed = Linking.parse(raw)
     const q = parsed.queryParams ?? {}
     const url = typeof q.url === 'string' ? q.url : null

@@ -211,7 +211,7 @@ function Main() {
       <StatusBar style="light" />
       <View style={[styles.row, { justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 }]}>
         <View>
-          <Text style={{ color: colors.text, fontSize: 26, fontWeight: '800' }}>SubCast</Text>
+          <Text style={{ color: colors.text, fontSize: 26, fontWeight: '800' }}>StremCastio</Text>
           <Text style={styles.muted}>{t.tagline}</Text>
         </View>
         <View style={styles.row}>

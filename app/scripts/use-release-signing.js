@@ -9,13 +9,13 @@ let gradle = fs.readFileSync(file, 'utf8')
 
 const releaseConfig = `
         release {
-            storeFile file(SUBCAST_STORE_FILE)
-            storePassword SUBCAST_STORE_PASSWORD
-            keyAlias SUBCAST_KEY_ALIAS
-            keyPassword SUBCAST_KEY_PASSWORD
+            storeFile file(STREMCASTIO_STORE_FILE)
+            storePassword STREMCASTIO_STORE_PASSWORD
+            keyAlias STREMCASTIO_KEY_ALIAS
+            keyPassword STREMCASTIO_KEY_PASSWORD
         }`
 
-if (!gradle.includes('SUBCAST_STORE_FILE')) {
+if (!gradle.includes('STREMCASTIO_STORE_FILE')) {
   gradle = gradle.replace(/signingConfigs \{\n(\s+debug \{[\s\S]*?\n\s+\})/, (m) => m + releaseConfig)
   gradle = gradle.replace(
     /(release \{\n(?:\s*\/\/.*\n)*\s*)signingConfig signingConfigs\.debug/,

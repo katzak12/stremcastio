@@ -1,9 +1,9 @@
-# SubCast
+# StremCastio
 
 **Cast Stremio streams to a Chromecast — with subtitles.**
 
 If you cast from your phone through VLC (or most other external players), the
-subtitles never reach the TV. SubCast fixes that: it sends the original video
+subtitles never reach the TV. StremCastio fixes that: it sends the original video
 to the Chromecast and adds the subtitle as a proper Chromecast text track.
 There's no re-encoding and no quality loss, and your phone can go to sleep
 while you watch.
@@ -20,14 +20,14 @@ The Chromecast only shows subtitles that are **WebVTT** and served with
 **CORS headers**. Subtitle sources (OpenSubtitles, Stremio add-ons) serve SRT
 without CORS, and VLC doesn't convert them. So the receiver drops them.
 
-SubCast solves this with a tiny **subtitle relay**: a free Cloudflare Worker
+StremCastio solves this with a tiny **subtitle relay**: a free Cloudflare Worker
 that fetches the subtitle, converts SRT/ASS/SSA to WebVTT (and fixes encodings
 such as Windows-1252), then serves it with the right headers. The relay only
 ever sees the subtitle file. The video goes straight from your debrid service
 to the TV.
 
 ```
-Stremio ──link──▶ SubCast (phone) ──"play this + this subtitle"──▶ Chromecast
+Stremio ──link──▶ StremCastio (phone) ──"play this + this subtitle"──▶ Chromecast
                                                          │            │
                                        video ◀───────────┘            │
                      (Real-Debrid etc.)                               │
@@ -38,22 +38,22 @@ Stremio ──link──▶ SubCast (phone) ──"play this + this subtitle"─
 
 | Platform | How |
 |---|---|
-| Android | Download `SubCast.apk` from [Releases](../../releases) and open it. |
-| iPhone / iPad | Download `SubCast.ipa` from [Releases](../../releases) and install it with **AltStore** or **SideStore**, the same way you installed Stremio. |
+| Android | Download `StremCastio.apk` from [Releases](../../releases) and open it. |
+| iPhone / iPad | Download `StremCastio.ipa` from [Releases](../../releases) and install it with **AltStore** or **SideStore**, the same way you installed Stremio. |
 
 ## Use it with Stremio
 
 **Android (one tap):**
 1. Stremio → Settings → Player → *External player* → **Let Android choose**.
-2. Start a stream, then pick **SubCast**.
+2. Start a stream, then pick **StremCastio**.
 3. Tap **Cast to TV** and choose your TV.
 
 **iPhone:**
 1. In Stremio, copy the stream's link.
-2. Open SubCast and tap **Paste**. SubCast recognises the movie or episode and finds subtitles.
+2. Open StremCastio and tap **Paste**. StremCastio recognises the movie or episode and finds subtitles.
 3. Tap **Cast to TV**.
 
-You can also open `subcast://cast?url=<stream>&sub=<subtitle>` from Shortcuts or other apps.
+You can also open `stremcastio://cast?url=<stream>&sub=<subtitle>` from Shortcuts or other apps.
 
 ## Running the relay (one time, free)
 
@@ -65,7 +65,7 @@ automatically.
    - secret `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers")
    - secret `CLOUDFLARE_ACCOUNT_ID`
 3. Push to `main`. The *Subtitle relay* workflow tests and deploys `worker/`.
-4. Copy the Worker URL (e.g. `https://subcast-relay.<you>.workers.dev`) into
+4. Copy the Worker URL (e.g. `https://stremcastio-relay.<you>.workers.dev`) into
    the repository **variable** `RELAY_URL`. App builds then use it as the default.
 
 Optional: to support subtitle *files* stored on the phone (not just links),

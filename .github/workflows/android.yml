@@ -58,10 +58,10 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
           cat >> android/gradle.properties <<PROPS
-          SUBCAST_STORE_FILE=release.keystore
-          SUBCAST_STORE_PASSWORD=$KEYSTORE_PASSWORD
-          SUBCAST_KEY_ALIAS=$KEY_ALIAS
-          SUBCAST_KEY_PASSWORD=$KEY_PASSWORD
+          STREMCASTIO_STORE_FILE=release.keystore
+          STREMCASTIO_STORE_PASSWORD=$KEYSTORE_PASSWORD
+          STREMCASTIO_KEY_ALIAS=$KEY_ALIAS
+          STREMCASTIO_KEY_PASSWORD=$KEY_PASSWORD
           PROPS
           node scripts/use-release-signing.js
 
@@ -70,15 +70,15 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Rename
-        run: cp android/app/build/outputs/apk/release/app-release.apk ../SubCast.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk ../StremCastio.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SubCast-android
-          path: SubCast.apk
+          name: StremCastio-android
+          path: StremCastio.apk
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: SubCast.apk
+          files: StremCastio.apk

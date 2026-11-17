@@ -43,8 +43,8 @@ const en = {
   test: 'Test',
   size: 'Subtitle size on TV',
   howTo: 'How to use',
-  howToAndroid: 'In Stremio: Settings → Player → External player → "Let Android choose" (or "Ask"), then pick SubCast when you start a stream. Subtitles you picked in Stremio come along.',
-  howToIos: 'In Stremio: long-press a stream → Copy stream link, then open SubCast. Subtitles are searched automatically.',
+  howToAndroid: 'In Stremio: Settings → Player → External player → "Let Android choose" (or "Ask"), then pick StremCastio when you start a stream. Subtitles you picked in Stremio come along.',
+  howToIos: 'In Stremio: long-press a stream → Copy stream link, then open StremCastio. Subtitles are searched automatically.',
   remove: 'Remove',
   source: 'Source',
 }
@@ -94,8 +94,8 @@ const nl: Strings = {
   test: 'Test',
   size: 'Grootte ondertitels op tv',
   howTo: 'Zo gebruik je het',
-  howToAndroid: 'In Stremio: Instellingen → Speler → Externe speler → "Laat Android kiezen", en kies SubCast als je een stream start. De ondertitel die je in Stremio koos gaat mee.',
-  howToIos: 'In Stremio: houd een stream ingedrukt → Streamlink kopiëren, en open SubCast. Ondertitels worden automatisch gezocht.',
+  howToAndroid: 'In Stremio: Instellingen → Speler → Externe speler → "Laat Android kiezen", en kies StremCastio als je een stream start. De ondertitel die je in Stremio koos gaat mee.',
+  howToIos: 'In Stremio: houd een stream ingedrukt → Streamlink kopiëren, en open StremCastio. Ondertitels worden automatisch gezocht.',
   remove: 'Verwijderen',
   source: 'Bron',
 }

@@ -1,4 +1,4 @@
-name = "subcast-relay"
+name = "stremcastio-relay"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"
 
