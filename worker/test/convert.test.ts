@@ -37,7 +37,7 @@ test('SRT -> VTT with cleaning', () => {
   assert.equal(format, 'srt')
   assert.equal(cues, 2)
   assert.ok(vtt.startsWith('WEBVTT\n\n'))
-  assert.ok(vtt.includes('00:00:01.000 --> 00:00:04.500\nHallo <i>wereld</i>\nTom &amp; Jerry &lt;3'))
+  assert.ok(vtt.includes('00:00:01.000 --> 00:00:04.500 line:0\nHallo <i>wereld</i>\nTom &amp; Jerry &lt;3'))
   assert.ok(vtt.includes('00:01:02.050 --> 00:01:03.900\nTweede regel'))
 })
 
@@ -68,7 +68,7 @@ Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Eerst`
   assert.equal(format, 'ass')
   assert.equal(cues, 2)
   assert.ok(vtt.indexOf('Eerst') < vtt.indexOf('Hoi'))
-  assert.ok(vtt.includes('00:00:05.100 --> 00:00:07.000\nHoi, hoe gaat het?\nprima'))
+  assert.ok(vtt.includes('00:00:05.100 --> 00:00:07.000\n<i>Hoi</i>, hoe gaat het?\nprima'))
 })
 
 test('VTT passthrough re-renders', () => {
@@ -124,4 +124,39 @@ test('worker: upload + fetch with KV', async () => {
   const got = await worker.fetch(new Request(url), { SUBS })
   assert.equal(got.status, 200)
   assert.ok((await got.text()).includes('Tweede regel'))
+})
+
+test('ASS: top-aligned styles, \\an8, unclosed italics, drawings skipped', () => {
+  const ass = `[Script Info]
+Title: x
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, Alignment
+Style: Default,Arial,20,2
+Style: Sign,Arial,20,8
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Gewoon onderin
+Dialogue: 0,0:00:03.00,0:00:04.00,Sign,,0,0,0,,BORD
+Dialogue: 0,0:00:05.00,0:00:06.00,Default,,0,0,0,,{\\an8}Bovenin
+Dialogue: 0,0:00:07.00,0:00:08.00,Default,,0,0,0,,{\\i1}Cursief tot het eind
+Dialogue: 0,0:00:09.00,0:00:10.00,Default,,0,0,0,,{\\p1}m 0 0 l 100 0 100 100`
+  const { vtt, cues } = toVtt(ass)
+  assert.equal(cues, 4)
+  assert.ok(vtt.includes('00:00:01.000 --> 00:00:02.000\nGewoon onderin'))
+  assert.ok(vtt.includes('00:00:03.000 --> 00:00:04.000 line:0\nBORD'))
+  assert.ok(vtt.includes('00:00:05.000 --> 00:00:06.000 line:0\nBovenin'))
+  assert.ok(vtt.includes('<i>Cursief tot het eind</i>'))
+  assert.ok(!vtt.includes('m 0 0'))
+})
+
+test('VTT: placement settings kept, styling settings dropped', () => {
+  const { vtt } = toVtt('WEBVTT\n\n00:01.000 --> 00:02.000 line:0 position:50% size:80% vertical:rl\nboven\n')
+  assert.ok(vtt.includes('00:00:01.000 --> 00:00:02.000 line:0 position:50%\nboven'))
+})
+
+test('SRT: bold/underline overrides become tags', () => {
+  const { vtt } = toVtt('1\n00:00:01,000 --> 00:00:02,000\n{\\b1}Vet{\\b0} en {\\u1}onder{\\u0}\n')
+  assert.ok(vtt.includes('<b>Vet</b> en <u>onder</u>'))
 })

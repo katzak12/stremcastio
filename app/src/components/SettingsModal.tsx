@@ -3,6 +3,7 @@ import { Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View }
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { APP_LANGUAGES, t } from '../lib/i18n'
 import { englishName, LANGUAGE_CHOICES, langName } from '../lib/languages'
+import { STANDARD_LOOK } from '../lib/cast'
 import { pingRelay } from '../lib/relay'
 import type { Settings } from '../lib/settings'
 import { addonBase } from '../lib/subtitles'
@@ -122,6 +123,24 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
               ]}
               value={settings.subtitleBackground}
               onChange={(v) => onChange({ subtitleBackground: v })}
+            />
+            <Text style={styles.muted}>{t.styleHint}</Text>
+            <Button
+              label={t.resetStyle}
+              kind="ghost"
+              small
+              disabled={
+                settings.fontScale === STANDARD_LOOK.fontScale &&
+                settings.subtitleColor === STANDARD_LOOK.color &&
+                settings.subtitleBackground === STANDARD_LOOK.background
+              }
+              onPress={() =>
+                onChange({
+                  fontScale: STANDARD_LOOK.fontScale,
+                  subtitleColor: STANDARD_LOOK.color,
+                  subtitleBackground: STANDARD_LOOK.background,
+                })
+              }
             />
           </Card>
 

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { useCallback, useEffect, useState } from 'react'
+import { STANDARD_LOOK } from './cast'
 import { withEnglishFirst } from './languages'
 import { OPENSUBTITLES_ADDON } from './subtitles'
 
@@ -32,9 +33,9 @@ export function defaultSettings(): Settings {
     appLanguage: 'en',
     addons: [OPENSUBTITLES_ADDON],
     relayUrl: extra.relayUrl ?? '',
-    fontScale: 1.2,
-    subtitleColor: 'white',
-    subtitleBackground: 'none',
+    fontScale: STANDARD_LOOK.fontScale,
+    subtitleColor: STANDARD_LOOK.color,
+    subtitleBackground: STANDARD_LOOK.background,
     autoSearch: true,
     streamAddons: [],
     autoNext: true,

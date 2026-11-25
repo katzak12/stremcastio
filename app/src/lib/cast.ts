@@ -7,6 +7,13 @@ export const SUBTITLE_TRACK_ID = 1
 
 export type SubtitleLook = { fontScale: number; color: 'white' | 'yellow'; background: 'none' | 'box' }
 
+/**
+ * The industry look (Netflix Timed Text Style Guide, followed by most streaming services and studios):
+ * white sans-serif with a black edge, no box, bottom centre, at the receiver's normal size.
+ * Readable on any picture while hiding as little of it as possible.
+ */
+export const STANDARD_LOOK: SubtitleLook = { fontScale: 1, color: 'white', background: 'none' }
+
 export function textStyle(look: SubtitleLook): TextTrackStyle {
   const box = look.background === 'box'
   return {
