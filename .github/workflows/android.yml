@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Optional: build this tag (e.g. v0.2.0) and attach the APK to its GitHub release'
+        description: 'Optional: attach the APK to this tag''s release (e.g. v0.2.1). A missing tag/release is created from main.'
         required: false
         default: ''
 
@@ -28,9 +28,27 @@ jobs:
       run:
         working-directory: app
     steps:
+      # Manual run with a tag that does not exist yet: build main and create the release + tag from it.
+      - name: Pick the source to build
+        id: src
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "$RELEASE_TAG" ]; then
+            if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+              echo "ref=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+            else
+              echo "ref=main" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "ref=$GITHUB_REF" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ steps.src.outputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -97,8 +115,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            # Codemagic may create the same release at the same moment; ignore a "already exists" error.
-            gh release create "$RELEASE_TAG" --verify-tag --title "StremCastio $RELEASE_TAG" --notes "" || true
+            # Creates the tag on the commit we just built if it does not exist yet. Codemagic may create
+            # the same release at the same moment; ignore an "already exists" error.
+            gh release create "$RELEASE_TAG" --target "$(git rev-parse HEAD)" --title "StremCastio ${RELEASE_TAG#v}" --notes "" || true
           fi
           for i in 1 2 3 4; do
             gh release upload "$RELEASE_TAG" StremCastio.apk --clobber && exit 0
