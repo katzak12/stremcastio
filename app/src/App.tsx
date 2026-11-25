@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import GoogleCast, {
   CastButton,
   CastState,
@@ -10,23 +10,26 @@ import GoogleCast, {
   useCastState,
   useMediaStatus,
   useRemoteMediaClient,
+  useStreamPosition,
 } from 'react-native-google-cast'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { SettingsModal } from './components/SettingsModal'
 import { Badge, Button, Card, colors, styles } from './components/ui'
 import { activateSubtitles, buildLoadRequest } from './lib/cast'
-import { t } from './lib/i18n'
+import { setAppLanguage, t } from './lib/i18n'
 import { useIncoming, type Incoming } from './lib/incoming'
 import { langName } from './lib/languages'
+import { fetchDetails, formatClock, formatRuntime, type MediaDetails } from './lib/meta'
 import { isRemote, relayVttUrl, uploadLocalSubtitle } from './lib/relay'
 import { useSettings } from './lib/settings'
 import { describeStream, extractUrl, type StreamInfo } from './lib/stream'
-import { rankSubtitles, searchSubtitles, type SubtitleOption } from './lib/subtitles'
+import { lookupImdbId, rankSubtitles, searchSubtitles, type SubtitleOption } from './lib/subtitles'
 
 type SearchState = { status: 'idle' | 'searching' | 'done'; message?: string }
 
 const NONE = 'none'
 const SYNC_STEP_MS = 250
+const ICON_SIZE = 32
 
 export default function App() {
   return (
@@ -38,6 +41,7 @@ export default function App() {
 
 function Main() {
   const { settings, update } = useSettings()
+  setAppLanguage(settings?.appLanguage)
   const [showSettings, setShowSettings] = useState(false)
 
   const [stream, setStream] = useState<StreamInfo | null>(null)
@@ -52,6 +56,7 @@ function Main() {
   const [busy, setBusy] = useState(false)
   const [castError, setCastError] = useState<string | null>(null)
   const [pendingCast, setPendingCast] = useState(false)
+  const [details, setDetails] = useState<MediaDetails | null>(null)
 
   const castState = useCastState()
   const client = useRemoteMediaClient()
@@ -59,6 +64,25 @@ function Main() {
   const mediaStatus = useMediaStatus()
   const connected = castState === CastState.CONNECTED && client != null
   const isPlayingOurs = !!mediaStatus?.mediaInfo && mediaStatus.mediaInfo.contentUrl === stream?.url
+  const position = useStreamPosition(1)
+
+  // One IMDb lookup per stream, shared by the subtitle search and the artwork/rating.
+  const imdbLookup = useMemo(() => (stream ? lookupImdbId(stream).catch(() => null) : null), [stream])
+
+  useEffect(() => {
+    setDetails(null)
+    if (!stream || !imdbLookup) return
+    let cancelled = false
+    imdbLookup
+      .then((imdb) => (imdb ? fetchDetails(imdb.id, stream) : null))
+      .then((d) => {
+        if (!cancelled) setDetails(d)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [stream, imdbLookup])
 
   // ---------- incoming streams ----------
 
@@ -90,7 +114,12 @@ function Main() {
     if (!stream || !settings) return
     setSearch({ status: 'searching' })
     try {
-      const res = await searchSubtitles({ release: stream, filename: stream.filename, addons: settings.addons })
+      const imdb = await imdbLookup
+      if (!imdb) {
+        setSearch({ status: 'done', message: t.titleNotFound })
+        return
+      }
+      const res = await searchSubtitles({ release: stream, filename: stream.filename, addons: settings.addons, imdbId: imdb.id })
       const ranked = rankSubtitles(res.options, settings.languages)
       setFound(ranked)
       setSearch({
@@ -105,7 +134,7 @@ function Main() {
     } catch (e) {
       setSearch({ status: 'done', message: `${t.error}: ${e instanceof Error ? e.message : String(e)}` })
     }
-  }, [stream, settings])
+  }, [stream, settings, imdbLookup])
 
   useEffect(() => {
     if (stream && settings?.autoSearch && search.status === 'idle') runSearch()
@@ -152,6 +181,7 @@ function Main() {
           subtitleName: selected ? langName(selected.lang) : undefined,
           fontScale: settings.fontScale,
           startTime,
+          details,
         })
         await client.loadMedia(request)
         await activateSubtitles(client, vttUrl != null)
@@ -161,7 +191,7 @@ function Main() {
         setBusy(false)
       }
     },
-    [client, stream, settings, selected, offsetMs, resolveVtt],
+    [client, stream, settings, selected, offsetMs, resolveVtt, details],
   )
 
   const onCastPress = async () => {
@@ -215,9 +245,14 @@ function Main() {
           <Text style={styles.muted}>{t.tagline}</Text>
         </View>
         <View style={styles.row}>
-          <CastButton style={{ width: 32, height: 32, tintColor: colors.text }} />
-          <Pressable accessibilityLabel={t.settings} onPress={() => setShowSettings(true)} hitSlop={12}>
-            <Text style={{ color: colors.text, fontSize: 24 }}>⚙︎</Text>
+          <CastButton style={{ width: ICON_SIZE, height: ICON_SIZE, tintColor: colors.text }} />
+          <Pressable
+            accessibilityLabel={t.settings}
+            onPress={() => setShowSettings(true)}
+            hitSlop={12}
+            style={{ width: ICON_SIZE, height: ICON_SIZE, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text style={{ color: colors.text, fontSize: ICON_SIZE, lineHeight: ICON_SIZE + 2 }}>⚙︎</Text>
           </Pressable>
         </View>
       </View>
@@ -226,19 +261,7 @@ function Main() {
         {/* ---------- video ---------- */}
         <Card title={t.videoTitle}>
           {stream ? (
-            <View style={{ gap: 6 }}>
-              <Text style={[styles.text, { fontSize: 19, fontWeight: '700' }]}>
-                {stream.title}
-                {stream.year ? ` (${stream.year})` : ''}
-                {stream.season !== undefined
-                  ? `  S${String(stream.season).padStart(2, '0')}E${String(stream.episode ?? 0).padStart(2, '0')}`
-                  : ''}
-              </Text>
-              <Text style={styles.muted} numberOfLines={2}>
-                {stream.filename}
-              </Text>
-              {stream.isLocalOnly && <Text style={{ color: colors.warn }}>{t.localOnly}</Text>}
-            </View>
+            <VideoInfo stream={stream} details={details} />
           ) : (
             <Text style={styles.muted}>{t.noVideo}</Text>
           )}
@@ -339,6 +362,11 @@ function Main() {
               />
               <Button label="+10s" onPress={() => client?.seek({ position: 10, relative: true })} />
             </View>
+            <ProgressBar
+              position={position ?? mediaStatus?.streamPosition ?? 0}
+              duration={mediaStatus?.mediaInfo?.streamDuration ?? 0}
+              onSeek={(p) => client?.seek({ position: p })}
+            />
             {selected && (
               <View style={{ gap: 8 }}>
                 <Text style={styles.muted}>
@@ -418,5 +446,95 @@ function SubtitleRow(props: { active: boolean; onPress: () => void; lang: string
       </View>
       {props.active && <Text style={{ color: colors.accent, fontSize: 18 }}>✓</Text>}
     </Pressable>
+  )
+}
+
+function VideoInfo({ stream, details }: { stream: StreamInfo; details: MediaDetails | null }) {
+  const episodeCode =
+    stream.season !== undefined
+      ? `S${String(stream.season).padStart(2, '0')}E${String(stream.episode ?? 0).padStart(2, '0')}`
+      : undefined
+  const facts = [
+    details?.year ?? (stream.year ? String(stream.year) : undefined),
+    formatRuntime(details?.runtimeMinutes),
+    ...(details?.genres ?? []).slice(0, 2),
+  ].filter(Boolean)
+
+  return (
+    <View style={{ gap: 10 }}>
+      {details?.image ? (
+        <Image
+          source={{ uri: details.image }}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+          style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: '#11131A' }}
+        />
+      ) : null}
+      <View style={{ gap: 4 }}>
+        <Text style={[styles.text, { fontSize: 19, fontWeight: '700' }]}>{details?.name ?? stream.title}</Text>
+        {episodeCode ? (
+          <Text style={[styles.text, { color: colors.muted }]}>
+            {episodeCode}
+            {details?.episodeTitle ? ` · ${details.episodeTitle}` : ''}
+          </Text>
+        ) : null}
+        <View style={[styles.row, { flexWrap: 'wrap', gap: 8 }]}>
+          {details?.rating ? (
+            <View style={styles.imdb}>
+              <Text style={styles.imdbText}>IMDb</Text>
+              <Text style={[styles.text, { fontSize: 14, fontWeight: '700' }]}>★ {details.rating.toFixed(1)}</Text>
+            </View>
+          ) : null}
+          {facts.length > 0 && <Text style={styles.muted}>{facts.join(' · ')}</Text>}
+        </View>
+      </View>
+      {details?.description ? (
+        <Text style={styles.muted} numberOfLines={3}>
+          {details.description}
+        </Text>
+      ) : null}
+      <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
+        {stream.filename}
+      </Text>
+      {stream.isLocalOnly && <Text style={{ color: colors.warn }}>{t.localOnly}</Text>}
+    </View>
+  )
+}
+
+/** Tap anywhere on the bar to jump there. */
+function ProgressBar({ position, duration, onSeek }: { position: number; duration: number; onSeek: (p: number) => void }) {
+  const [width, setWidth] = useState(0)
+  const progress = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0
+  return (
+    <View style={{ gap: 6 }}>
+      <Pressable
+        disabled={duration <= 0}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onPress={(e) => width > 0 && onSeek((e.nativeEvent.locationX / width) * duration)}
+        hitSlop={{ top: 14, bottom: 14 }}
+        style={{ height: 6, borderRadius: 3, backgroundColor: '#2C303C', justifyContent: 'center' }}
+      >
+        <View pointerEvents="none" style={{ width: `${progress * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.accent }} />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: Math.max(0, progress * width - 7),
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: colors.text,
+          }}
+        />
+      </Pressable>
+      <View style={[styles.row, { justifyContent: 'space-between' }]}>
+        <Text style={[styles.muted, { fontSize: 12 }]}>{formatClock(position)}</Text>
+        {duration > 0 && (
+          <Text style={[styles.muted, { fontSize: 12 }]}>
+            −{formatClock(duration - position)} {t.left}
+          </Text>
+        )}
+      </View>
+    </View>
   )
 }

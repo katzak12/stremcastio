@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { t } from '../lib/i18n'
-import { LANGUAGE_CHOICES, langName } from '../lib/languages'
+import { APP_LANGUAGES, t } from '../lib/i18n'
+import { englishName, LANGUAGE_CHOICES, langName } from '../lib/languages'
 import { pingRelay } from '../lib/relay'
 import type { Settings } from '../lib/settings'
 import { addonBase } from '../lib/subtitles'
-import { Button, Card, colors, styles } from './ui'
+import { LanguagePicker } from './LanguagePicker'
+import { Badge, Button, Card, colors, styles } from './ui'
 
 type Props = {
   visible: boolean
@@ -19,15 +20,7 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
   const [addonInput, setAddonInput] = useState('')
   const [relayInput, setRelayInput] = useState(settings.relayUrl)
   const [relayState, setRelayState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
-  const [pickLang, setPickLang] = useState(false)
-
-  const moveLang = (index: number, dir: -1 | 1) => {
-    const next = [...settings.languages]
-    const j = index + dir
-    if (j < 0 || j >= next.length) return
-    ;[next[index], next[j]] = [next[j], next[index]]
-    onChange({ languages: next })
-  }
+  const [picker, setPicker] = useState<'app' | 'subs' | null>(null)
 
   const saveRelay = async () => {
     const value = relayInput.trim().replace(/\/+$/, '')
@@ -45,41 +38,47 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
           <Button label={t.done} kind="ghost" small onPress={onClose} />
         </View>
         <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
-          <Card title={t.languages}>
+          <Card title={t.languagesTitle}>
+            <Text style={styles.label}>{t.appLanguage}</Text>
+            <Pressable
+              onPress={() => setPicker('app')}
+              style={({ pressed }) => [styles.row, styles.selectRow, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={[styles.text, { flex: 1 }]}>
+                {APP_LANGUAGES.find((l) => l.key === settings.appLanguage)?.name ?? 'English'}
+              </Text>
+              <Text style={{ color: colors.muted, fontSize: 18 }}>›</Text>
+            </Pressable>
+
+            <Text style={[styles.label, { marginTop: 8 }]}>{t.subtitleLanguages}</Text>
             {settings.languages.map((code, i) => (
-              <View key={code} style={[styles.row, { justifyContent: 'space-between' }]}>
-                <Text style={styles.text}>
-                  {i + 1}. {langName(code)}
+              <View key={code} style={[styles.row, styles.selectRow]}>
+                <Badge text={code.toUpperCase()} tone={i === 0 ? 'accent' : 'default'} />
+                <Text style={[styles.text, { flex: 1 }]}>
+                  {langName(code)}
+                  {i === 0 ? <Text style={styles.muted}>{`  ${t.alwaysFirst}`}</Text> : null}
                 </Text>
-                <View style={styles.row}>
-                  <Button label="↑" small onPress={() => moveLang(i, -1)} disabled={i === 0} />
-                  <Button label="↓" small onPress={() => moveLang(i, 1)} disabled={i === settings.languages.length - 1} />
-                  <Button
-                    label="✕"
-                    small
+                {code !== 'en' && (
+                  <Pressable
+                    accessibilityLabel={`${langName(code)} ✕`}
+                    hitSlop={10}
                     onPress={() => onChange({ languages: settings.languages.filter((l) => l !== code) })}
-                    disabled={settings.languages.length <= 1}
-                  />
-                </View>
+                  >
+                    <Text style={{ color: colors.muted, fontSize: 18 }}>✕</Text>
+                  </Pressable>
+                )}
               </View>
             ))}
-            <Button label={`+ ${t.addLanguage}`} kind="ghost" small onPress={() => setPickLang((v) => !v)} />
-            {pickLang && (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {LANGUAGE_CHOICES.filter((l) => !settings.languages.includes(l.key)).map((l) => (
-                  <Pressable
-                    key={l.key}
-                    onPress={() => {
-                      onChange({ languages: [...settings.languages, l.key] })
-                      setPickLang(false)
-                    }}
-                    style={{ backgroundColor: '#242733', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }}
-                  >
-                    <Text style={{ color: colors.text }}>{l.name}</Text>
-                  </Pressable>
-                ))}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setPicker('subs')}
+              style={({ pressed }) => [styles.row, styles.selectRow, { borderStyle: 'dashed' }, pressed && { opacity: 0.7 }]}
+            >
+              <View style={styles.plus}>
+                <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '700', lineHeight: 22 }}>+</Text>
               </View>
-            )}
+              <Text style={[styles.text, { color: colors.accent }]}>{t.addLanguage}</Text>
+            </Pressable>
           </Card>
 
           <Card title={t.size}>
@@ -153,6 +152,22 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
           </Card>
         </ScrollView>
       </SafeAreaView>
+
+      <LanguagePicker
+        visible={picker === 'app'}
+        title={t.appLanguage}
+        items={APP_LANGUAGES.map((l) => ({ ...l, english: englishName(l.key) }))}
+        selected={[settings.appLanguage]}
+        onPick={(key) => onChange({ appLanguage: key })}
+        onClose={() => setPicker(null)}
+      />
+      <LanguagePicker
+        visible={picker === 'subs'}
+        title={t.addLanguage}
+        items={LANGUAGE_CHOICES.filter((l) => !settings.languages.includes(l.key))}
+        onPick={(key) => onChange({ languages: [...settings.languages, key] })}
+        onClose={() => setPicker(null)}
+      />
     </Modal>
   )
 }

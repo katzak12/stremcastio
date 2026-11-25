@@ -1,5 +1,6 @@
 import type { MediaLoadRequest, MediaTrack, RemoteMediaClient, TextTrackStyle } from 'react-native-google-cast'
 import { normalizeLang } from './languages'
+import type { MediaDetails } from './meta'
 import type { StreamInfo } from './stream'
 
 export const SUBTITLE_TRACK_ID = 1
@@ -23,6 +24,7 @@ export function buildLoadRequest(opts: {
   subtitleName?: string
   fontScale: number
   startTime?: number
+  details?: MediaDetails | null
 }): MediaLoadRequest {
   const tracks: MediaTrack[] = opts.vttUrl
     ? [
@@ -38,10 +40,7 @@ export function buildLoadRequest(opts: {
       ]
     : []
 
-  const title =
-    opts.stream.season !== undefined && opts.stream.episode !== undefined
-      ? `${opts.stream.title} S${String(opts.stream.season).padStart(2, '0')}E${String(opts.stream.episode).padStart(2, '0')}`
-      : opts.stream.title
+  const metadata = buildMetadata(opts.stream, opts.details)
 
   const request = {
     autoplay: true,
@@ -50,7 +49,7 @@ export function buildLoadRequest(opts: {
       contentUrl: opts.stream.url,
       contentType: opts.stream.contentType,
       streamType: 'buffered',
-      metadata: { type: 'movie', title, subtitle: opts.stream.filename },
+      metadata,
       mediaTracks: tracks,
       textTrackStyle: textStyle(opts.fontScale),
     },
@@ -58,6 +57,30 @@ export function buildLoadRequest(opts: {
     activeTrackIds: tracks.length ? [SUBTITLE_TRACK_ID] : [],
   }
   return request as unknown as MediaLoadRequest
+}
+
+/** What the TV shows while loading/paused: title, episode info and artwork. */
+export function buildMetadata(stream: StreamInfo, details?: MediaDetails | null): Record<string, unknown> {
+  const images = [details?.poster, details?.image].filter((u): u is string => !!u).map((url) => ({ url }))
+  const isEpisode = stream.season !== undefined && stream.episode !== undefined
+  if (isEpisode) {
+    const code = `S${String(stream.season).padStart(2, '0')}E${String(stream.episode).padStart(2, '0')}`
+    const series = details?.name ?? stream.title
+    return {
+      type: 'tvShow',
+      seriesTitle: series,
+      title: details?.episodeTitle ? `${code} · ${details.episodeTitle}` : `${series} ${code}`,
+      seasonNumber: stream.season,
+      episodeNumber: stream.episode,
+      images,
+    }
+  }
+  return {
+    type: 'movie',
+    title: details?.name ?? stream.title,
+    subtitle: details?.year ?? (stream.year ? String(stream.year) : stream.filename),
+    images,
+  }
 }
 
 /** Turn the subtitle track on once the receiver has a media session. Retries briefly. */

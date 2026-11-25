@@ -71,7 +71,14 @@ export function langName(code: string): string {
   return TABLE.find(([k]) => k === key)?.[1] ?? code.toUpperCase()
 }
 
-export const LANGUAGE_CHOICES = TABLE.map(([key, name]) => ({ key, name }))
+/** English name per key ("nl" -> "Dutch"): the first entry in ENGLISH_NAMES for that key. */
+export function englishName(code: string): string {
+  const key = normalizeLang(code)
+  const name = Object.entries(ENGLISH_NAMES).find(([, k]) => k === key)?.[0]
+  return name ? name[0].toUpperCase() + name.slice(1) : langName(key)
+}
+
+export const LANGUAGE_CHOICES = TABLE.map(([key, name]) => ({ key, name, english: englishName(key) }))
 
 /** First token in free text that is a known language code ("…/en/download/…" -> "en"). */
 export function findLangInText(text: string): string {
@@ -79,4 +86,9 @@ export function findLangInText(text: string): string {
     if (token.length >= 2 && LOOKUP.has(token)) return LOOKUP.get(token)!
   }
   return 'und'
+}
+
+/** Subtitle preference list: English first, then the user's own choices, without duplicates. */
+export function withEnglishFirst(langs: string[]): string[] {
+  return [...new Set(['en', ...langs.map(normalizeLang).filter((l) => l !== 'und')])]
 }
