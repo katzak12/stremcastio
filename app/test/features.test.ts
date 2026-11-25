@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildLoadRequest, buildMetadata, sleepPlaybackDuration, textStyle } from '../src/lib/cast'
+import { buildLoadRequest, buildMetadata, normalizeLook, sleepPlaybackDuration, STANDARD_LOOK, textStyle } from '../src/lib/cast'
 import { APP_LANGUAGES, setAppLanguage, stringsFor, t } from '../src/lib/i18n'
 import { englishName, LANGUAGE_CHOICES, withEnglishFirst } from '../src/lib/languages'
 import { formatClock, formatRuntime, parseRuntime, toDetails } from '../src/lib/meta'
@@ -157,7 +157,7 @@ test('sleep timer: TV-side playback limit in a one-item queue', () => {
   assert.equal(sleepPlaybackDuration(30, now - 1000, now), 5)
 
   const stream = describeStream('https://x/The.Matrix.1999.mkv')
-  const look = { fontScale: 1, color: 'white' as const, background: 'none' as const }
+  const look = STANDARD_LOOK
   const timed = buildLoadRequest({ stream, vttUrl: 'https://r/vtt', look, startTime: 120, playbackDuration: 1800 }) as any
   assert.equal(timed.mediaInfo, undefined)
   assert.equal(timed.queueData.items.length, 1)
@@ -170,14 +170,30 @@ test('sleep timer: TV-side playback limit in a one-item queue', () => {
   assert.equal(plain.mediaInfo.contentUrl, stream.url)
 })
 
-test('subtitle look', () => {
-  const y = textStyle({ fontScale: 1.5, color: 'yellow', background: 'box' }) as any
-  assert.equal(y.foregroundColor, '#FFD65CFF')
-  assert.equal(y.backgroundColor, '#000000B3')
-  assert.equal(y.fontScale, 1.5)
-  const w = textStyle({ fontScale: 1, color: 'white', background: 'none' }) as any
-  assert.equal(w.edgeType, 'outline')
-  assert.equal(w.backgroundColor, '#00000000')
+test('subtitle look: TV standard, options, iOS colour workaround', () => {
+  const std = textStyle(STANDARD_LOOK) as any
+  assert.equal(std.foregroundColor, '#FFFFFFFF')
+  assert.equal(std.foreroundColor, '#FFFFFFFF') // misspelt key read by the iOS bridge
+  assert.equal(std.edgeType, 'outline')
+  assert.equal(std.backgroundColor, '#00000000')
+  assert.equal(std.fontGenericFamily, 'sansSerif')
+  const custom = textStyle({ fontScale: 1.5, color: 'cyan', edge: 'dropShadow', background: 'solid', font: 'serif' }) as any
+  assert.equal(custom.foregroundColor, '#5CE1FFFF')
+  assert.equal(custom.edgeType, 'dropShadow')
+  assert.equal(custom.backgroundColor, '#000000FF')
+  assert.equal(custom.fontGenericFamily, 'serif')
+  assert.equal(custom.fontScale, 1.5)
+})
+
+test('normalizeLook: old settings and junk fall back sensibly', () => {
+  assert.deepEqual(normalizeLook({}), STANDARD_LOOK)
+  assert.deepEqual(normalizeLook({ fontScale: 1.2, color: 'yellow', background: 'box' }), {
+    ...STANDARD_LOOK,
+    fontScale: 1.2,
+    color: 'yellow',
+    background: 'semi',
+  })
+  assert.deepEqual(normalizeLook({ color: 'pink', edge: 'glow', font: 'comic' }), STANDARD_LOOK)
 })
 
 import { hasDolbyAudio, unsupportedAudio } from '../src/lib/streams'
@@ -207,4 +223,26 @@ test('pickBestStream: Dolby alternative for a DTS remux', () => {
   assert.equal(pickBestStream(streams.slice(0, 2), current, opts), null)
   // Without the requirement (next episode), DTS still loses to a playable version.
   assert.equal(pickBestStream(streams, current)?.url, 'https://x/4kddp')
+})
+
+import { loadWithRetry, pingTv } from '../src/lib/castConnect'
+
+test('loadWithRetry: survives a TV that is still starting up', async () => {
+  let calls = 0
+  const client = { loadMedia: async () => { calls++; if (calls < 3) throw new Error('not ready') } }
+  await loadWithRetry(client as any, {} as any, 4, 1)
+  assert.equal(calls, 3)
+  const broken = { loadMedia: async () => { throw new Error('nope') } }
+  await assert.rejects(loadWithRetry(broken as any, {} as any, 2, 1), /nope/)
+})
+
+test('pingTv: a hanging connection counts as dead, an answer (even an error) as alive', async () => {
+  assert.equal(await pingTv({ requestStatus: () => new Promise<void>(() => {}) } as any, 20), 'timeout')
+  assert.equal(await pingTv({ requestStatus: async () => {} } as any, 20), 'ok')
+  assert.equal(await pingTv({ requestStatus: async () => { throw new Error('no media session') } } as any, 20), 'error')
+})
+
+test('loadWithRetry: a load that hangs times out instead of spinning forever', async () => {
+  const hanging = { loadMedia: () => new Promise<void>(() => {}) }
+  await assert.rejects(loadWithRetry(hanging as any, {} as any, 2, 1, 20), /did not respond/)
 })

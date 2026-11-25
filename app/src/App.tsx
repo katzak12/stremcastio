@@ -7,6 +7,7 @@ import GoogleCast, {
   CastState,
   MediaPlayerState,
   useCastDevice,
+  useDevices,
   useCastSession,
   useCastState,
   useMediaStatus,
@@ -16,7 +17,8 @@ import GoogleCast, {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { SettingsModal } from './components/SettingsModal'
 import { Badge, Button, Card, Chips, colors, styles } from './components/ui'
-import { activateSubtitles, buildLoadRequest, sleepPlaybackDuration, SUBTITLE_TRACK_ID, textStyle, type SleepMode, type SubtitleLook } from './lib/cast'
+import { activateSubtitles, buildLoadRequest, sleepPlaybackDuration, STANDARD_LOOK, SUBTITLE_TRACK_ID, textStyle, type SleepMode, type SubtitleLook } from './lib/cast'
+import { getRememberedDevice, loadWithRetry, pingTv, rememberDevice } from './lib/castConnect'
 import { setAppLanguage, t } from './lib/i18n'
 import { useIncoming, type Incoming } from './lib/incoming'
 import { langName } from './lib/languages'
@@ -25,7 +27,7 @@ import { isRemote, relayVttUrl, uploadLocalSubtitle } from './lib/relay'
 import { addonFromStreamUrl, findEpisodeStream, findPlayableAudioStream, unsupportedAudio } from './lib/streams'
 import { clearResume, getResume, saveResume } from './lib/resume'
 import { getSyncOffset, saveSyncOffset, syncKey } from './lib/syncMemory'
-import { useSettings } from './lib/settings'
+import { lookFromSettings, useSettings } from './lib/settings'
 import { describeStream, extractUrl, type StreamInfo } from './lib/stream'
 import { lookupImdbId, rankSubtitles, searchSubtitles, stremioVideoId, type SubtitleOption } from './lib/subtitles'
 
@@ -72,6 +74,9 @@ function Main() {
   const [busy, setBusy] = useState(false)
   const [castError, setCastError] = useState<string | null>(null)
   const [pendingCast, setPendingCast] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const reconnectTried = useRef(false)
+  const reconnectRef = useRef<(() => void) | null>(null)
   const [details, setDetails] = useState<MediaDetails | null>(null)
   const [imdbId, setImdbId] = useState<string | null>(null)
   const [offsetSaved, setOffsetSaved] = useState(false)
@@ -217,9 +222,7 @@ function Main() {
     [settings],
   )
 
-  const look: SubtitleLook | null = settings
-    ? { fontScale: settings.fontScale, color: settings.subtitleColor, background: settings.subtitleBackground }
-    : null
+  const look: SubtitleLook | null = settings ? lookFromSettings(settings) : null
 
   const loadOnTv = useCallback(
     async (startTime = 0, offset = offsetMs, sleepState: { mode: SleepMode; endsAt: number | null } = { mode: sleep, endsAt: sleepEndsAt }) => {
@@ -241,9 +244,17 @@ function Main() {
         // A fresh load replaces the TV's queue, so line up the next episode again afterwards.
         preparedFor.current = null
         setNextUp({ status: 'idle' })
-        await client.loadMedia(request)
-        await activateSubtitles(client, vttUrl != null)
+        await loadWithRetry(client, request)
+        reconnectTried.current = false
+        await activateSubtitles(client, vttUrl != null, look)
       } catch (e) {
+        // A dead "remembered" connection: reconnect to the same TV once, then cast again.
+        if (!reconnectTried.current) {
+          reconnectTried.current = true
+          reconnectRef.current?.()
+          return
+        }
+        reconnectTried.current = false
         setCastError(e instanceof Error ? e.message : String(e))
       } finally {
         setBusy(false)
@@ -285,9 +296,18 @@ function Main() {
     for (const key of resumeKeys) saveResume(key, position, duration)
   }, [isPlayingOurs, position, duration, resumeKeys])
 
-  const onCastPress = async () => {
-    if (connected) return startCasting()
-    setPendingCast(true)
+  // ---------- connecting to the TV ----------
+
+  // Remember the TV we last cast to, so "Cast to TV" can connect straight to it.
+  const devices = useDevices()
+  useEffect(() => {
+    if (connected && device?.deviceId) rememberDevice(device.deviceId)
+  }, [connected, device?.deviceId])
+
+  const connectedRef = useRef(connected)
+  connectedRef.current = connected
+
+  const openPicker = async () => {
     try {
       await GoogleCast.showCastDialog()
     } catch {
@@ -295,13 +315,83 @@ function Main() {
     }
   }
 
-  // Continue once the user has picked a TV in the dialog.
+  /** Drop a dead connection and connect to the same TV again; casting continues once connected. */
+  const reconnectAndCast = async () => {
+    const id = device?.deviceId ?? (await getRememberedDevice())
+    setReconnecting(true)
+    setPendingCast(true)
+    try {
+      await GoogleCast.getSessionManager().endCurrentSession(false)
+    } catch {
+      // already gone
+    }
+    if (id) {
+      try {
+        if (await GoogleCast.getSessionManager().startSession(id)) {
+          setTimeout(() => {
+            if (!connectedRef.current) {
+              setReconnecting(false)
+              openPicker()
+            }
+          }, 10000)
+          return
+        }
+      } catch {
+        // fall through to the picker
+      }
+    }
+    setReconnecting(false)
+    openPicker()
+  }
+  reconnectRef.current = reconnectAndCast
+
+  const onCastPress = async () => {
+    if (connected && client) {
+      // "Cast to TV · <name>": check the remembered connection still works before using it.
+      setBusy(true)
+      const alive = await pingTv(client)
+      setBusy(false)
+      if (alive === 'timeout') return reconnectAndCast()
+      return startCasting()
+    }
+    setPendingCast(true)
+    // Already (re)connecting: just wait, the effect below starts playback once connected.
+    if (castState === CastState.CONNECTING) return
+    const last = await getRememberedDevice()
+    if (last && devices.some((d) => d.deviceId === last)) {
+      try {
+        if (await GoogleCast.getSessionManager().startSession(last)) {
+          // Fall back to the picker if the TV doesn't answer in time.
+          setTimeout(() => {
+            if (!connectedRef.current) openPicker()
+          }, 8000)
+          return
+        }
+      } catch {
+        // fall through to the picker
+      }
+    }
+    openPicker()
+  }
+
+  // Continue once connected (picked in the dialog, or reconnected to the remembered TV).
   useEffect(() => {
     if (pendingCast && connected) {
       setPendingCast(false)
+      setReconnecting(false)
       startCasting()
     }
   }, [pendingCast, connected, startCasting])
+
+  // Don't start casting much later out of the blue if the dialog was closed without choosing a TV.
+  useEffect(() => {
+    if (!pendingCast) return
+    const timer = setTimeout(() => {
+      setPendingCast(false)
+      setReconnecting(false)
+    }, 60000)
+    return () => clearTimeout(timer)
+  }, [pendingCast])
 
   // Subtitle sync: reload at the current position with a shifted subtitle (debounced).
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -413,7 +503,7 @@ function Main() {
           vttUrl,
           subtitleLang: sub?.lang,
           subtitleName: sub ? langName(sub.lang) : undefined,
-          look: look ?? { fontScale: settings.fontScale, color: 'white', background: 'none' },
+          look: look ?? STANDARD_LOOK,
           details: details
             ? { ...details, episodeTitle: next.name, image: next.thumbnail ?? details.image, nextEpisode: undefined }
             : null,
@@ -452,7 +542,7 @@ function Main() {
     setOffsetMs(nextUp.offsetMs)
     setCastError(null)
     setNextUp({ status: 'idle' })
-    if (client) activateSubtitles(client, nextUp.subtitleKey !== NONE)
+    if (client) activateSubtitles(client, nextUp.subtitleKey !== NONE, look ?? undefined)
   }, [tvUrl, nextUp, client])
 
   // ---------- sleep timer ----------
@@ -752,10 +842,18 @@ function Main() {
       {stream && !(connected && isPlayingOurs) && (
         <View style={{ position: 'absolute', left: 16, right: 16, bottom: 28 }}>
           <Button
-            label={busy ? t.loading : connected ? `${t.castButton} · ${device?.friendlyName ?? ''}` : t.castButton}
+            label={
+              reconnecting
+                ? t.reconnecting
+                : busy
+                  ? t.loading
+                  : connected
+                    ? `${t.castButton} · ${device?.friendlyName ?? ''}`
+                    : t.castButton
+            }
             kind="primary"
-            loading={busy}
-            disabled={stream.isLocalOnly}
+            loading={busy && !reconnecting}
+            disabled={stream.isLocalOnly || reconnecting}
             onPress={onCastPress}
             style={{ minHeight: 58, borderRadius: 18 }}
           />

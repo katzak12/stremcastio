@@ -5,24 +5,69 @@ import type { StreamInfo } from './stream'
 
 export const SUBTITLE_TRACK_ID = 1
 
-export type SubtitleLook = { fontScale: number; color: 'white' | 'yellow'; background: 'none' | 'box' }
+export type SubtitleColor = 'white' | 'yellow' | 'cyan' | 'green'
+export type SubtitleEdge = 'outline' | 'dropShadow' | 'raised' | 'depressed' | 'none'
+export type SubtitleBackground = 'none' | 'semi' | 'solid'
+export type SubtitleFont = 'sansSerif' | 'serif' | 'monoSansSerif' | 'casual' | 'smallCaps'
+
+export type SubtitleLook = {
+  fontScale: number
+  color: SubtitleColor
+  edge: SubtitleEdge
+  background: SubtitleBackground
+  font: SubtitleFont
+}
 
 /**
- * The industry look (Netflix Timed Text Style Guide, followed by most streaming services and studios):
- * white sans-serif with a black edge, no box, bottom centre, at the receiver's normal size.
- * Readable on any picture while hiding as little of it as possible.
+ * The TV standard: white sans-serif text with a black outline, no box, bottom centre, normal size.
+ * What broadcasters and streaming services use: readable on any picture, hides as little as possible.
  */
-export const STANDARD_LOOK: SubtitleLook = { fontScale: 1, color: 'white', background: 'none' }
+export const STANDARD_LOOK: SubtitleLook = {
+  fontScale: 1,
+  color: 'white',
+  edge: 'outline',
+  background: 'none',
+  font: 'sansSerif',
+}
+
+export const COLOR_HEX: Record<SubtitleColor, string> = {
+  white: '#FFFFFF',
+  yellow: '#FFD65C',
+  cyan: '#5CE1FF',
+  green: '#7CFF7C',
+}
+
+const BACKGROUND_HEX: Record<SubtitleBackground, string> = {
+  none: '#00000000',
+  semi: '#000000B3',
+  solid: '#000000FF',
+}
+
+/** Older settings stored background 'box' and only white/yellow. */
+export function normalizeLook(raw: Partial<Record<keyof SubtitleLook, unknown>>): SubtitleLook {
+  const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
+    allowed.includes(v as T) ? (v as T) : fallback
+  return {
+    fontScale: typeof raw.fontScale === 'number' && raw.fontScale > 0 ? raw.fontScale : STANDARD_LOOK.fontScale,
+    color: pick(raw.color, ['white', 'yellow', 'cyan', 'green'] as const, STANDARD_LOOK.color),
+    edge: pick(raw.edge, ['outline', 'dropShadow', 'raised', 'depressed', 'none'] as const, STANDARD_LOOK.edge),
+    background: raw.background === 'box' ? 'semi' : pick(raw.background, ['none', 'semi', 'solid'] as const, STANDARD_LOOK.background),
+    font: pick(raw.font, ['sansSerif', 'serif', 'monoSansSerif', 'casual', 'smallCaps'] as const, STANDARD_LOOK.font),
+  }
+}
 
 export function textStyle(look: SubtitleLook): TextTrackStyle {
-  const box = look.background === 'box'
+  const fg = `${COLOR_HEX[look.color]}FF`
   return {
     fontScale: look.fontScale,
-    foregroundColor: look.color === 'yellow' ? '#FFD65CFF' : '#FFFFFFFF',
-    backgroundColor: box ? '#000000B3' : '#00000000',
-    edgeType: box ? 'none' : 'outline',
+    foregroundColor: fg,
+    // react-native-google-cast's iOS bridge reads the colour from a misspelt key ("foreroundColor");
+    // send both so the colour arrives on every platform.
+    foreroundColor: fg,
+    backgroundColor: BACKGROUND_HEX[look.background],
+    edgeType: look.edge,
     edgeColor: '#000000FF',
-    fontGenericFamily: 'sansSerif',
+    fontGenericFamily: look.font,
     windowType: 'none',
   } as TextTrackStyle
 }
@@ -130,13 +175,16 @@ export function buildMetadata(stream: StreamInfo, details?: MediaDetails | null)
   }
 }
 
-/** Turn the subtitle track on once the receiver has a media session. Retries briefly. */
-export async function activateSubtitles(client: RemoteMediaClient, enabled: boolean): Promise<void> {
+/** Turn the subtitle track on (and apply our look) once the receiver has a media session. Retries briefly. */
+export async function activateSubtitles(client: RemoteMediaClient, enabled: boolean, look?: SubtitleLook): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt++) {
     try {
       const status = await client.getMediaStatus()
       if (status?.mediaInfo) {
         await client.setActiveTrackIds(enabled ? [SUBTITLE_TRACK_ID] : [])
+        // The iOS bridge ignores textTrackStyle inside the load request, so the TV would fall back to its
+        // own look (white on a black box). Setting it on the live session works on iOS and Android.
+        if (look) await client.setTextTrackStyle(textStyle(look)).catch(() => {})
         return
       }
     } catch {

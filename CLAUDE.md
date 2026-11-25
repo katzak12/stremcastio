@@ -58,6 +58,14 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   Source URL: https://github.com/katzak12/stremcastio/releases/latest/download/altstore-source.json
   Release = bump `version`, `ios.buildNumber`, `android.versionCode` in app/app.json, then push tag v<version>.
   User guide: INSTALL.md (NL + EN). AltStore PAL is not an option without a paid Apple Developer account.
+- 0.2.1 fixes (from Guus's test): the iOS bridge of react-native-google-cast ignores `textTrackStyle` in the load
+  request (commented out) and reads foreground colour from a misspelt key `foreroundColor`; so the TV showed its own
+  default (white on black box). We now call setTextTrackStyle after every load (activateSubtitles) and send both keys.
+  Subtitle options: colour (white/yellow/cyan/green), edge (outline/shadow/raised/depressed/none), background
+  (none/see-through/solid), font, size; "Use the TV standard" resets. Casting: last TV remembered (castConnect.ts),
+  "Cast to TV" connects straight to it, waits while CONNECTING, and loadMedia retries (with a timeout) while the
+  receiver starts. When already "connected" (button shows the TV name) the app pings the TV first (requestStatus, 3 s);
+  a hang or a failed load drops the dead session and reconnects to the same TV once, then casts (reconnectAndCast).
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions
