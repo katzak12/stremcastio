@@ -45,7 +45,7 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
 - Relay conversion (deployed 2026-11-25): ASS/SRT override tags {\i1}/{\b1}/{\u1} become <i>/<b>/<u>; top placement
   ({\an7-9}, legacy {\a5-7}, or an ASS style with top Alignment) becomes the VTT cue setting `line:0`; VTT
   line/position/align settings are kept; ASS vector drawings ({\p1}) are skipped. Colours/fonts are dropped on purpose:
-  the TV applies one readable look (default = Netflix-style white with black outline). Whether the Chromecast honours
+  the TV applies one readable look (default STANDARD_LOOK in cast.ts = Netflix-style white with black outline, fontScale 1, no box; "Use the standard style" button in Settings). Whether the Chromecast honours
   `line:0` is not yet verified on hardware.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 

@@ -79,6 +79,8 @@ const en = {
   bgNone: "None",
   bgBox: "Black box",
   preview: "This is how subtitles look",
+  resetStyle: "Use the standard style",
+  styleHint: "Standard: white sans-serif text with a black edge, bottom centre, no box. This is the style streaming services and film studios use: readable on any picture, while covering as little of it as possible.",
 }
 
 export type Strings = typeof en
@@ -161,6 +163,8 @@ const nl: Strings = {
   bgNone: "Geen",
   bgBox: "Zwart vlak",
   preview: "Zo zien ondertitels eruit",
+  resetStyle: "Standaardstijl gebruiken",
+  styleHint: "Standaard: witte schreefloze tekst met een zwarte rand, onderin het midden, zonder vlak. Deze stijl gebruiken streamingdiensten en filmstudio’s: leesbaar op elk beeld, terwijl er zo min mogelijk van het beeld wordt bedekt.",
 }
 
 const es: Strings = {
@@ -241,6 +245,8 @@ const es: Strings = {
   bgNone: "Ninguno",
   bgBox: "Caja negra",
   preview: "Así se ven los subtítulos",
+  resetStyle: "Usar el estilo estándar",
+  styleHint: "Estándar: texto blanco sin serifa con borde negro, abajo en el centro, sin caja. Es el estilo de los servicios de streaming y los estudios de cine: legible sobre cualquier imagen y tapando lo mínimo.",
 }
 
 const pt: Strings = {
@@ -321,6 +327,8 @@ const pt: Strings = {
   bgNone: "Nenhum",
   bgBox: "Caixa preta",
   preview: "Assim ficam as legendas",
+  resetStyle: "Usar o estilo padrão",
+  styleHint: "Padrão: texto branco sem serifa com borda preta, embaixo no centro, sem caixa. É o estilo usado por serviços de streaming e estúdios: legível em qualquer imagem, cobrindo o mínimo possível.",
 }
 
 const fr: Strings = {
@@ -401,6 +409,8 @@ const fr: Strings = {
   bgNone: "Aucun",
   bgBox: "Encadré noir",
   preview: "Aperçu des sous-titres",
+  resetStyle: "Utiliser le style standard",
+  styleHint: "Standard : texte blanc sans empattement avec contour noir, en bas au centre, sans encadré. C’est le style des plateformes de streaming et des studios : lisible sur toute image, en masquant le moins possible.",
 }
 
 const it: Strings = {
@@ -481,6 +491,8 @@ const it: Strings = {
   bgNone: "Nessuno",
   bgBox: "Riquadro nero",
   preview: "Ecco come appaiono i sottotitoli",
+  resetStyle: "Usa lo stile standard",
+  styleHint: "Standard: testo bianco senza grazie con bordo nero, in basso al centro, senza riquadro. È lo stile di servizi di streaming e studi cinematografici: leggibile su ogni immagine, coprendone il meno possibile.",
 }
 
 const tr: Strings = {
@@ -561,6 +573,8 @@ const tr: Strings = {
   bgNone: "Yok",
   bgBox: "Siyah kutu",
   preview: "Altyazılar böyle görünür",
+  resetStyle: "Standart stili kullan",
+  styleHint: "Standart: siyah kenarlı beyaz tırnaksız yazı, altta ortada, kutusuz. Yayın servisleri ve film stüdyolarının kullandığı stil: her görüntüde okunur, görüntüyü olabildiğince az kapatır.",
 }
 
 const ru: Strings = {
@@ -641,6 +655,8 @@ const ru: Strings = {
   bgNone: "Нет",
   bgBox: "Чёрная подложка",
   preview: "Так выглядят субтитры",
+  resetStyle: "Стандартный стиль",
+  styleHint: "Стандарт: белый шрифт без засечек с чёрной обводкой, внизу по центру, без подложки. Так делают стриминговые сервисы и киностудии: читается на любом фоне и почти не закрывает кадр.",
 }
 
 const ja: Strings = {
@@ -721,6 +737,8 @@ const ja: Strings = {
   bgNone: "なし",
   bgBox: "黒い帯",
   preview: "字幕の見え方",
+  resetStyle: "標準スタイルを使う",
+  styleHint: "標準: 黒い縁取りの白いゴシック体、下部中央、背景なし。配信サービスや映画スタジオが使うスタイルで、どんな映像でも読みやすく、画面をできるだけ隠しません。",
 }
 
 const zh: Strings = {
@@ -801,6 +819,8 @@ const zh: Strings = {
   bgNone: "无",
   bgBox: "黑色底框",
   preview: "字幕效果预览",
+  resetStyle: "使用标准样式",
+  styleHint: "标准：白色无衬线字体加黑色描边，底部居中，无底框。这是流媒体平台和电影公司采用的样式：在任何画面上都清晰可读，同时尽量少遮挡画面。",
 }
 
 const id: Strings = {
@@ -881,6 +901,8 @@ const id: Strings = {
   bgNone: "Tidak ada",
   bgBox: "Kotak hitam",
   preview: "Begini tampilan subtitle",
+  resetStyle: "Pakai gaya standar",
+  styleHint: "Standar: teks putih sans-serif dengan tepi hitam, di tengah bawah, tanpa kotak. Gaya yang dipakai layanan streaming dan studio film: mudah dibaca di gambar apa pun, sambil menutupi gambar sesedikit mungkin.",
 }
 
 const STRINGS: Record<string, Strings> = { en, nl, es, pt, fr, it, tr, ru, ja, zh, id }
