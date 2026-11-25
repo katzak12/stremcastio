@@ -101,6 +101,7 @@ const en = {
   fontMono: "Monospace",
   fontCasual: "Casual",
   fontSmallCaps: "Small caps",
+  reconnecting: "Reconnecting to your TV…",
 }
 
 export type Strings = typeof en
@@ -205,6 +206,7 @@ const nl: Strings = {
   fontMono: "Monospace",
   fontCasual: "Informeel",
   fontSmallCaps: "Kleinkapitaal",
+  reconnecting: "Opnieuw verbinden met je tv…",
 }
 
 const es: Strings = {
@@ -307,6 +309,7 @@ const es: Strings = {
   fontMono: "Monoespaciada",
   fontCasual: "Informal",
   fontSmallCaps: "Versalitas",
+  reconnecting: "Reconectando con tu TV…",
 }
 
 const pt: Strings = {
@@ -409,6 +412,7 @@ const pt: Strings = {
   fontMono: "Monoespaçada",
   fontCasual: "Informal",
   fontSmallCaps: "Versaletes",
+  reconnecting: "Reconectando à sua TV…",
 }
 
 const fr: Strings = {
@@ -511,6 +515,7 @@ const fr: Strings = {
   fontMono: "Chasse fixe",
   fontCasual: "Manuscrite",
   fontSmallCaps: "Petites capitales",
+  reconnecting: "Reconnexion à votre TV…",
 }
 
 const it: Strings = {
@@ -613,6 +618,7 @@ const it: Strings = {
   fontMono: "Monospaziato",
   fontCasual: "Informale",
   fontSmallCaps: "Maiuscoletto",
+  reconnecting: "Riconnessione alla TV…",
 }
 
 const tr: Strings = {
@@ -715,6 +721,7 @@ const tr: Strings = {
   fontMono: "Eş aralıklı",
   fontCasual: "Gündelik",
   fontSmallCaps: "Küçük büyük harf",
+  reconnecting: "TV’ye yeniden bağlanılıyor…",
 }
 
 const ru: Strings = {
@@ -817,6 +824,7 @@ const ru: Strings = {
   fontMono: "Моноширинный",
   fontCasual: "Неформальный",
   fontSmallCaps: "Капитель",
+  reconnecting: "Переподключение к ТВ…",
 }
 
 const ja: Strings = {
@@ -919,6 +927,7 @@ const ja: Strings = {
   fontMono: "等幅",
   fontCasual: "カジュアル",
   fontSmallCaps: "スモールキャップス",
+  reconnecting: "テレビに再接続中…",
 }
 
 const zh: Strings = {
@@ -1021,6 +1030,7 @@ const zh: Strings = {
   fontMono: "等宽",
   fontCasual: "休闲",
   fontSmallCaps: "小型大写",
+  reconnecting: "正在重新连接电视…",
 }
 
 const id: Strings = {
@@ -1123,6 +1133,7 @@ const id: Strings = {
   fontMono: "Monospace",
   fontCasual: "Santai",
   fontSmallCaps: "Kapital kecil",
+  reconnecting: "Menyambung ulang ke TV…",
 }
 
 const STRINGS: Record<string, Strings> = { en, nl, es, pt, fr, it, tr, ru, ja, zh, id }

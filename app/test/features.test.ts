@@ -225,7 +225,7 @@ test('pickBestStream: Dolby alternative for a DTS remux', () => {
   assert.equal(pickBestStream(streams, current)?.url, 'https://x/4kddp')
 })
 
-import { loadWithRetry } from '../src/lib/castConnect'
+import { loadWithRetry, pingTv } from '../src/lib/castConnect'
 
 test('loadWithRetry: survives a TV that is still starting up', async () => {
   let calls = 0
@@ -234,4 +234,15 @@ test('loadWithRetry: survives a TV that is still starting up', async () => {
   assert.equal(calls, 3)
   const broken = { loadMedia: async () => { throw new Error('nope') } }
   await assert.rejects(loadWithRetry(broken as any, {} as any, 2, 1), /nope/)
+})
+
+test('pingTv: a hanging connection counts as dead, an answer (even an error) as alive', async () => {
+  assert.equal(await pingTv({ requestStatus: () => new Promise<void>(() => {}) } as any, 20), 'timeout')
+  assert.equal(await pingTv({ requestStatus: async () => {} } as any, 20), 'ok')
+  assert.equal(await pingTv({ requestStatus: async () => { throw new Error('no media session') } } as any, 20), 'error')
+})
+
+test('loadWithRetry: a load that hangs times out instead of spinning forever', async () => {
+  const hanging = { loadMedia: () => new Promise<void>(() => {}) }
+  await assert.rejects(loadWithRetry(hanging as any, {} as any, 2, 1, 20), /did not respond/)
 })
