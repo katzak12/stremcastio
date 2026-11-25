@@ -101,3 +101,41 @@ test('i18n: default English, switch and fall back', () => {
     for (const [k, v] of Object.entries(s)) assert.ok(typeof v === 'string' && v.length > 0, `${key}.${k}`)
   }
 })
+
+import { findNextEpisode } from '../src/lib/meta'
+import { addonFromStreamUrl, pickBestStream } from '../src/lib/streams'
+
+test('findNextEpisode: within season, across seasons, skips specials and unaired', () => {
+  const videos = [
+    { season: 0, episode: 1 },
+    { season: 1, episode: 2, name: 'Two' },
+    { season: 1, episode: 1, name: 'One' },
+    { season: 2, episode: 1, name: 'S2 start', released: '2020-01-01T00:00:00Z' },
+    { season: 2, episode: 2, name: 'Future', released: '2999-01-01T00:00:00Z' },
+  ]
+  assert.deepEqual(findNextEpisode(videos, 1, 1), { season: 1, episode: 2, name: 'Two', thumbnail: undefined })
+  assert.equal(findNextEpisode(videos, 1, 2)?.name, 'S2 start')
+  assert.equal(findNextEpisode(videos, 2, 1), undefined) // not aired yet
+  assert.equal(findNextEpisode(videos, 2, 2), undefined)
+})
+
+test('addonFromStreamUrl: Torrentio debrid links', () => {
+  assert.equal(
+    addonFromStreamUrl('https://torrentio.strem.fun/resolve/realdebrid/ABC123/hash/null/0/Show.S01E01.mkv'),
+    'https://torrentio.strem.fun/realdebrid=ABC123',
+  )
+  assert.equal(addonFromStreamUrl('https://abc.download.real-debrid.com/d/XYZ/file.mkv'), null)
+})
+
+test('pickBestStream: prefers same quality, group and cached', () => {
+  const current = 'Show.S01E01.1080p.WEB-DL.x264-NTb.mkv'
+  const streams = [
+    { name: 'Torrentio\n4k', title: 'Show.S01E02.2160p.HDR.x265-OTHER', url: 'https://x/a' },
+    { name: '[RD download] Torrentio\n1080p', title: 'Show.S01E02.1080p.WEB-DL.x264-NTb', url: 'https://x/b' },
+    { name: '[RD+] Torrentio\n1080p', title: 'Show.S01E02.1080p.WEB-DL.x264-NTb', url: 'https://x/c' },
+    { name: '[RD+] Torrentio\n720p', title: 'Show.S01E02.720p.HDTV', url: 'https://x/d' },
+    { name: 'no url', infoHash: 'abc' },
+  ]
+  assert.equal(pickBestStream(streams, current)?.url, 'https://x/c')
+  assert.equal(pickBestStream([], current), null)
+})

@@ -35,6 +35,9 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   (Settings → Languages; en, es, pt, fr, it, tr, ru, ja, zh, id, nl in `src/lib/i18n.ts`), subtitle languages with
   English locked first and a searchable "+" list (`LanguagePicker.tsx`), artwork/IMDb rating/runtime/genres from
   Cinemeta (`src/lib/meta.ts`), title + poster on the TV, progress bar with tap-to-seek, settings icon same size as cast icon.
+  Also: subtitle sync remembered per video + subtitle file (`syncMemory.ts`); automatic next episode: while an episode
+  plays, the next one's stream (via a Stremio stream add-on, `streams.ts`; Torrentio debrid links are auto-detected)
+  plus subtitle is put in the Chromecast queue. New, simpler app icon (play triangle + subtitle bars).
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions

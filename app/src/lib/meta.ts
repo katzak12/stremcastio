@@ -46,6 +46,29 @@ export type MediaDetails = {
   episodeTitle?: string
   description?: string
   released?: string
+  /** The episode after this one (episodes only), if it has aired. */
+  nextEpisode?: NextEpisode
+}
+
+export type NextEpisode = { season: number; episode: number; name?: string; thumbnail?: string }
+
+/** First aired, non-special episode after season/episode, in order. */
+export function findNextEpisode(
+  videos: CinemetaVideo[] | undefined,
+  season: number,
+  episode: number,
+  now = Date.now(),
+): NextEpisode | undefined {
+  const list = (videos ?? [])
+    .map((v) => ({ ...v, ep: v.episode ?? v.number }))
+    .filter((v): v is typeof v & { season: number; ep: number } => typeof v.season === 'number' && typeof v.ep === 'number')
+    .filter((v) => v.season > 0)
+    .sort((a, b) => a.season - b.season || a.ep - b.ep)
+  const next = list.find((v) => v.season > season || (v.season === season && v.ep > episode))
+  if (!next) return undefined
+  const aired = Date.parse(next.released ?? next.firstAired ?? '')
+  if (Number.isFinite(aired) && aired > now) return undefined
+  return { season: next.season, episode: next.ep, name: next.name || next.title || undefined, thumbnail: next.thumbnail }
 }
 
 /** "136 min" | "2h 16min" | "1h" | "45" -> minutes */
@@ -100,6 +123,7 @@ export function toDetails(meta: CinemetaFullMeta, release: ParsedRelease): Media
     episodeTitle: video?.name || video?.title || undefined,
     description: (isEpisode ? video?.overview || video?.description : undefined) || meta.description,
     released: video?.released || video?.firstAired || undefined,
+    nextEpisode: isEpisode ? findNextEpisode(meta.videos, release.season!, release.episode!) : undefined,
   }
 }
 

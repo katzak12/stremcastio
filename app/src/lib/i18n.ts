@@ -50,6 +50,16 @@ const en = {
   howToAndroid: 'In Stremio: Settings → Player → External player → "Let Android choose" (or "Ask"), then pick StremCastio when you start a stream. Subtitles you picked in Stremio come along.',
   howToIos: 'In Stremio: long-press a stream → Copy stream link, then open StremCastio. Subtitles are searched automatically.',
   left: 'left',
+  upNext: "Up next",
+  playNow: "Play now",
+  preparingNext: "Finding the next episode…",
+  nextNotFound: "No stream found for the next episode.",
+  nextNeedsAddon: "Add your Stremio stream add-on in Settings to play the next episode automatically.",
+  nextEpisode: "Next episode",
+  autoNext: "Play the next episode automatically",
+  streamAddons: "Stream add-ons",
+  streamAddonHint: "Your Stremio stream add-on link (e.g. Torrentio with debrid), used to find the next episode. Torrentio debrid links are recognised automatically.",
+  saved: "saved",
 }
 
 export type Strings = typeof en
@@ -103,6 +113,16 @@ const nl: Strings = {
   howToAndroid: 'In Stremio: Instellingen → Speler → Externe speler → "Laat Android kiezen", en kies StremCastio als je een stream start. De ondertitel die je in Stremio koos gaat mee.',
   howToIos: 'In Stremio: houd een stream ingedrukt → Streamlink kopiëren, en open StremCastio. Ondertitels worden automatisch gezocht.',
   left: 'over',
+  upNext: "Hierna",
+  playNow: "Nu afspelen",
+  preparingNext: "Volgende aflevering zoeken…",
+  nextNotFound: "Geen stream gevonden voor de volgende aflevering.",
+  nextNeedsAddon: "Voeg je Stremio-stream-add-on toe bij Instellingen om de volgende aflevering automatisch af te spelen.",
+  nextEpisode: "Volgende aflevering",
+  autoNext: "Volgende aflevering automatisch afspelen",
+  streamAddons: "Stream-add-ons",
+  streamAddonHint: "Link van je Stremio-stream-add-on (bijv. Torrentio met debrid), om de volgende aflevering te vinden. Torrentio-debrid-links worden automatisch herkend.",
+  saved: "onthouden",
 }
 
 const es: Strings = {
@@ -154,6 +174,16 @@ const es: Strings = {
   howToAndroid: 'En Stremio: Ajustes → Reproductor → Reproductor externo → "Dejar que Android elija", y elige StremCastio al iniciar un stream. Los subtítulos elegidos en Stremio se incluyen.',
   howToIos: 'En Stremio: mantén pulsado un stream → Copiar enlace del stream, y abre StremCastio. Los subtítulos se buscan automáticamente.',
   left: 'restante',
+  upNext: "A continuación",
+  playNow: "Reproducir ahora",
+  preparingNext: "Buscando el siguiente episodio…",
+  nextNotFound: "No se encontró stream para el siguiente episodio.",
+  nextNeedsAddon: "Añade tu add-on de streams de Stremio en Ajustes para reproducir el siguiente episodio automáticamente.",
+  nextEpisode: "Siguiente episodio",
+  autoNext: "Reproducir el siguiente episodio automáticamente",
+  streamAddons: "Add-ons de streams",
+  streamAddonHint: "Enlace de tu add-on de streams de Stremio (p. ej. Torrentio con debrid), para encontrar el siguiente episodio. Los enlaces debrid de Torrentio se reconocen automáticamente.",
+  saved: "guardado",
 }
 
 const pt: Strings = {
@@ -205,6 +235,16 @@ const pt: Strings = {
   howToAndroid: 'No Stremio: Ajustes → Player → Player externo → "Deixar o Android escolher", e escolha StremCastio ao iniciar um stream. As legendas escolhidas no Stremio vêm junto.',
   howToIos: 'No Stremio: toque e segure um stream → Copiar link do stream, e abra o StremCastio. As legendas são procuradas automaticamente.',
   left: 'restante',
+  upNext: "A seguir",
+  playNow: "Reproduzir agora",
+  preparingNext: "Procurando o próximo episódio…",
+  nextNotFound: "Nenhum stream encontrado para o próximo episódio.",
+  nextNeedsAddon: "Adicione seu add-on de streams do Stremio em Ajustes para reproduzir o próximo episódio automaticamente.",
+  nextEpisode: "Próximo episódio",
+  autoNext: "Reproduzir o próximo episódio automaticamente",
+  streamAddons: "Add-ons de streams",
+  streamAddonHint: "Link do seu add-on de streams do Stremio (ex.: Torrentio com debrid), para encontrar o próximo episódio. Links debrid do Torrentio são reconhecidos automaticamente.",
+  saved: "salvo",
 }
 
 const fr: Strings = {
@@ -256,6 +296,16 @@ const fr: Strings = {
   howToAndroid: 'Dans Stremio : Réglages → Lecteur → Lecteur externe → « Laisser Android choisir », puis choisissez StremCastio au lancement d’un stream. Les sous-titres choisis dans Stremio suivent.',
   howToIos: 'Dans Stremio : appui long sur un stream → Copier le lien du stream, puis ouvrez StremCastio. Les sous-titres sont recherchés automatiquement.',
   left: 'restant',
+  upNext: "À suivre",
+  playNow: "Lire maintenant",
+  preparingNext: "Recherche de l’épisode suivant…",
+  nextNotFound: "Aucun stream trouvé pour l’épisode suivant.",
+  nextNeedsAddon: "Ajoutez votre add-on de streams Stremio dans Réglages pour lire l’épisode suivant automatiquement.",
+  nextEpisode: "Épisode suivant",
+  autoNext: "Lire l’épisode suivant automatiquement",
+  streamAddons: "Add-ons de streams",
+  streamAddonHint: "Lien de votre add-on de streams Stremio (ex. Torrentio avec debrid), pour trouver l’épisode suivant. Les liens debrid Torrentio sont reconnus automatiquement.",
+  saved: "mémorisé",
 }
 
 const it: Strings = {
@@ -307,6 +357,16 @@ const it: Strings = {
   howToAndroid: 'In Stremio: Impostazioni → Player → Player esterno → "Lascia scegliere ad Android", poi scegli StremCastio quando avvii uno stream. I sottotitoli scelti in Stremio vengono inclusi.',
   howToIos: 'In Stremio: tieni premuto uno stream → Copia link dello stream, poi apri StremCastio. I sottotitoli vengono cercati automaticamente.',
   left: 'rimanenti',
+  upNext: "A seguire",
+  playNow: "Riproduci ora",
+  preparingNext: "Ricerca episodio successivo…",
+  nextNotFound: "Nessuno stream trovato per l’episodio successivo.",
+  nextNeedsAddon: "Aggiungi il tuo add-on di stream di Stremio in Impostazioni per riprodurre l’episodio successivo automaticamente.",
+  nextEpisode: "Episodio successivo",
+  autoNext: "Riproduci automaticamente l’episodio successivo",
+  streamAddons: "Add-on di stream",
+  streamAddonHint: "Link del tuo add-on di stream di Stremio (es. Torrentio con debrid), per trovare l’episodio successivo. I link debrid di Torrentio vengono riconosciuti automaticamente.",
+  saved: "salvato",
 }
 
 const tr: Strings = {
@@ -358,6 +418,16 @@ const tr: Strings = {
   howToAndroid: 'Stremio’da: Ayarlar → Oynatıcı → Harici oynatıcı → "Android seçsin", ardından yayını başlatırken StremCastio’yu seçin. Stremio’da seçtiğiniz altyazılar da gelir.',
   howToIos: 'Stremio’da: bir yayına uzun basın → Yayın bağlantısını kopyala, sonra StremCastio’yu açın. Altyazılar otomatik aranır.',
   left: 'kaldı',
+  upNext: "Sıradaki",
+  playNow: "Şimdi oynat",
+  preparingNext: "Sonraki bölüm aranıyor…",
+  nextNotFound: "Sonraki bölüm için yayın bulunamadı.",
+  nextNeedsAddon: "Sonraki bölümü otomatik oynatmak için Ayarlar’dan Stremio yayın eklentinizi ekleyin.",
+  nextEpisode: "Sonraki bölüm",
+  autoNext: "Sonraki bölümü otomatik oynat",
+  streamAddons: "Yayın eklentileri",
+  streamAddonHint: "Stremio yayın eklentinizin bağlantısı (ör. debrid’li Torrentio), sonraki bölümü bulmak için. Torrentio debrid bağlantıları otomatik tanınır.",
+  saved: "kaydedildi",
 }
 
 const ru: Strings = {
@@ -409,6 +479,16 @@ const ru: Strings = {
   howToAndroid: 'В Stremio: Настройки → Плеер → Внешний плеер → «Выбор Android», затем выберите StremCastio при запуске потока. Выбранные в Stremio субтитры передаются тоже.',
   howToIos: 'В Stremio: удерживайте поток → Копировать ссылку на поток, затем откройте StremCastio. Субтитры ищутся автоматически.',
   left: 'осталось',
+  upNext: "Далее",
+  playNow: "Смотреть сейчас",
+  preparingNext: "Поиск следующей серии…",
+  nextNotFound: "Поток для следующей серии не найден.",
+  nextNeedsAddon: "Добавьте аддон потоков Stremio в Настройках, чтобы следующая серия включалась автоматически.",
+  nextEpisode: "Следующая серия",
+  autoNext: "Автоматически включать следующую серию",
+  streamAddons: "Аддоны потоков",
+  streamAddonHint: "Ссылка на ваш аддон потоков Stremio (например, Torrentio с debrid) для поиска следующей серии. Debrid-ссылки Torrentio распознаются автоматически.",
+  saved: "сохранено",
 }
 
 const ja: Strings = {
@@ -460,6 +540,16 @@ const ja: Strings = {
   howToAndroid: 'Stremio で: 設定 → プレーヤー → 外部プレーヤー →「Android に選択させる」にし、ストリーム開始時に StremCastio を選びます。Stremio で選んだ字幕も引き継がれます。',
   howToIos: 'Stremio で: ストリームを長押し → ストリームのリンクをコピーし、StremCastio を開きます。字幕は自動で検索されます。',
   left: '残り',
+  upNext: "次に再生",
+  playNow: "今すぐ再生",
+  preparingNext: "次のエピソードを検索中…",
+  nextNotFound: "次のエピソードのストリームが見つかりません。",
+  nextNeedsAddon: "次のエピソードを自動再生するには、設定で Stremio のストリームアドオンを追加してください。",
+  nextEpisode: "次のエピソード",
+  autoNext: "次のエピソードを自動再生",
+  streamAddons: "ストリームアドオン",
+  streamAddonHint: "Stremio ストリームアドオンのリンク（例: debrid 付き Torrentio）。次のエピソードを探すのに使います。Torrentio の debrid リンクは自動で認識されます。",
+  saved: "保存済み",
 }
 
 const zh: Strings = {
@@ -511,6 +601,16 @@ const zh: Strings = {
   howToAndroid: '在 Stremio 中：设置 → 播放器 → 外部播放器 →“让 Android 选择”，开始播放时选择 StremCastio。在 Stremio 中选的字幕会一起传过来。',
   howToIos: '在 Stremio 中：长按视频流 → 复制视频流链接，然后打开 StremCastio。字幕会自动搜索。',
   left: '剩余',
+  upNext: "接下来",
+  playNow: "立即播放",
+  preparingNext: "正在查找下一集…",
+  nextNotFound: "未找到下一集的视频流。",
+  nextNeedsAddon: "在设置中添加你的 Stremio 视频流插件，即可自动播放下一集。",
+  nextEpisode: "下一集",
+  autoNext: "自动播放下一集",
+  streamAddons: "视频流插件",
+  streamAddonHint: "你的 Stremio 视频流插件链接（如带 debrid 的 Torrentio），用于查找下一集。Torrentio 的 debrid 链接会被自动识别。",
+  saved: "已保存",
 }
 
 const id: Strings = {
@@ -562,6 +662,16 @@ const id: Strings = {
   howToAndroid: 'Di Stremio: Pengaturan → Pemutar → Pemutar eksternal → "Biarkan Android memilih", lalu pilih StremCastio saat memulai stream. Subtitle yang kamu pilih di Stremio ikut terbawa.',
   howToIos: 'Di Stremio: tekan lama sebuah stream → Salin tautan stream, lalu buka StremCastio. Subtitle dicari otomatis.',
   left: 'tersisa',
+  upNext: "Berikutnya",
+  playNow: "Putar sekarang",
+  preparingNext: "Mencari episode berikutnya…",
+  nextNotFound: "Tidak ada stream untuk episode berikutnya.",
+  nextNeedsAddon: "Tambahkan add-on stream Stremio di Pengaturan untuk memutar episode berikutnya secara otomatis.",
+  nextEpisode: "Episode berikutnya",
+  autoNext: "Putar episode berikutnya otomatis",
+  streamAddons: "Add-on stream",
+  streamAddonHint: "Tautan add-on stream Stremio kamu (mis. Torrentio dengan debrid), untuk mencari episode berikutnya. Tautan debrid Torrentio dikenali otomatis.",
+  saved: "tersimpan",
 }
 
 const STRINGS: Record<string, Strings> = { en, nl, es, pt, fr, it, tr, ru, ja, zh, id }

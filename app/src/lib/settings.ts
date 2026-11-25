@@ -15,6 +15,9 @@ export type Settings = {
   /** Chromecast subtitle size, 1 = receiver default. */
   fontScale: number
   autoSearch: boolean
+  /** Stremio stream add-ons (e.g. Torrentio with debrid), for the next episode. */
+  streamAddons: string[]
+  autoNext: boolean
 }
 
 const KEY = 'stremcastio.settings.v1'
@@ -29,6 +32,8 @@ export function defaultSettings(): Settings {
     relayUrl: extra.relayUrl ?? '',
     fontScale: 1.2,
     autoSearch: true,
+    streamAddons: [],
+    autoNext: true,
   }
 }
 

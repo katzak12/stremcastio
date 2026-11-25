@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { APP_LANGUAGES, t } from '../lib/i18n'
 import { englishName, LANGUAGE_CHOICES, langName } from '../lib/languages'
@@ -18,6 +18,7 @@ type Props = {
 
 export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
   const [addonInput, setAddonInput] = useState('')
+  const [streamAddonInput, setStreamAddonInput] = useState('')
   const [relayInput, setRelayInput] = useState(settings.relayUrl)
   const [relayState, setRelayState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [picker, setPicker] = useState<'app' | 'subs' | null>(null)
@@ -122,6 +123,49 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
                 onPress={() => {
                   onChange({ addons: [...new Set([...settings.addons, addonInput.trim()])] })
                   setAddonInput('')
+                }}
+              />
+            </View>
+          </Card>
+
+          <Card title={t.nextEpisode}>
+            <View style={[styles.row, { justifyContent: 'space-between' }]}>
+              <Text style={[styles.text, { flex: 1 }]}>{t.autoNext}</Text>
+              <Switch
+                value={settings.autoNext}
+                onValueChange={(v) => onChange({ autoNext: v })}
+                trackColor={{ true: colors.accent, false: '#2C303C' }}
+              />
+            </View>
+            <Text style={[styles.label, { marginTop: 4 }]}>{t.streamAddons}</Text>
+            <Text style={styles.muted}>{t.streamAddonHint}</Text>
+            {settings.streamAddons.map((a) => (
+              <View key={a} style={[styles.row, { justifyContent: 'space-between' }]}>
+                <Text style={[styles.text, { flex: 1, fontSize: 14 }]} numberOfLines={1}>
+                  {/* Hide debrid keys and other config: show only the host. */}
+                  {addonBase(a).replace(/^https?:\/\//, '').split('/')[0]}
+                </Text>
+                <Button label="✕" small onPress={() => onChange({ streamAddons: settings.streamAddons.filter((x) => x !== a) })} />
+              </View>
+            ))}
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="https://torrentio.strem.fun/…/manifest.json"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                value={streamAddonInput}
+                onChangeText={setStreamAddonInput}
+              />
+              <Button
+                label={t.addAddon}
+                small
+                disabled={!/^(https?|stremio):\/\//i.test(streamAddonInput.trim())}
+                onPress={() => {
+                  onChange({ streamAddons: [...new Set([...settings.streamAddons, streamAddonInput.trim()])] })
+                  setStreamAddonInput('')
                 }}
               />
             </View>

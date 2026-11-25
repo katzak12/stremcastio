@@ -15,17 +15,31 @@ import GoogleCast, {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { SettingsModal } from './components/SettingsModal'
 import { Badge, Button, Card, colors, styles } from './components/ui'
-import { activateSubtitles, buildLoadRequest } from './lib/cast'
+import { activateSubtitles, buildLoadRequest, SUBTITLE_TRACK_ID } from './lib/cast'
 import { setAppLanguage, t } from './lib/i18n'
 import { useIncoming, type Incoming } from './lib/incoming'
 import { langName } from './lib/languages'
 import { fetchDetails, formatClock, formatRuntime, type MediaDetails } from './lib/meta'
 import { isRemote, relayVttUrl, uploadLocalSubtitle } from './lib/relay'
+import { addonFromStreamUrl, findEpisodeStream } from './lib/streams'
+import { getSyncOffset, saveSyncOffset, syncKey } from './lib/syncMemory'
 import { useSettings } from './lib/settings'
 import { describeStream, extractUrl, type StreamInfo } from './lib/stream'
-import { lookupImdbId, rankSubtitles, searchSubtitles, type SubtitleOption } from './lib/subtitles'
+import { lookupImdbId, rankSubtitles, searchSubtitles, stremioVideoId, type SubtitleOption } from './lib/subtitles'
 
 type SearchState = { status: 'idle' | 'searching' | 'done'; message?: string }
+
+type NextUp =
+  | { status: 'idle' | 'preparing' | 'notfound' | 'noaddon'; label?: string }
+  | {
+      status: 'ready'
+      label: string
+      url: string
+      stream: StreamInfo
+      subtitles: SubtitleOption[]
+      subtitleKey: string
+      offsetMs: number
+    }
 
 const NONE = 'none'
 const SYNC_STEP_MS = 250
@@ -57,6 +71,10 @@ function Main() {
   const [castError, setCastError] = useState<string | null>(null)
   const [pendingCast, setPendingCast] = useState(false)
   const [details, setDetails] = useState<MediaDetails | null>(null)
+  const [imdbId, setImdbId] = useState<string | null>(null)
+  const [offsetSaved, setOffsetSaved] = useState(false)
+  const [nextUp, setNextUp] = useState<NextUp>({ status: 'idle' })
+  const preparedFor = useRef<string | null>(null)
 
   const castState = useCastState()
   const client = useRemoteMediaClient()
@@ -71,10 +89,14 @@ function Main() {
 
   useEffect(() => {
     setDetails(null)
+    setImdbId(null)
     if (!stream || !imdbLookup) return
     let cancelled = false
     imdbLookup
-      .then((imdb) => (imdb ? fetchDetails(imdb.id, stream) : null))
+      .then((imdb) => {
+        if (!cancelled) setImdbId(imdb?.id ?? null)
+        return imdb ? fetchDetails(imdb.id, stream) : null
+      })
       .then((d) => {
         if (!cancelled) setDetails(d)
       })
@@ -96,6 +118,8 @@ function Main() {
     setOffsetMs(0)
     setCastError(null)
     setLinkInput('')
+    setNextUp({ status: 'idle' })
+    preparedFor.current = null
   }, [])
 
   useIncoming(
@@ -155,6 +179,25 @@ function Main() {
   }, [allOptions, showAll, settings, selectedKey])
 
   const selected = allOptions.find((o) => o.key === selectedKey) ?? null
+
+  // ---------- remembered subtitle sync ----------
+
+  const videoId = imdbId && stream ? stremioVideoId(imdbId, stream).id : null
+  const offsetKey = videoId && selected ? syncKey(videoId, selected.url) : null
+
+  useEffect(() => {
+    setOffsetSaved(false)
+    if (!offsetKey) return
+    let cancelled = false
+    getSyncOffset(offsetKey).then((ms) => {
+      if (cancelled) return
+      setOffsetMs(ms ?? 0)
+      setOffsetSaved(ms != null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [offsetKey])
 
   // ---------- casting ----------
 
@@ -217,6 +260,10 @@ function Main() {
   const nudgeSync = (delta: number) => {
     const next = offsetMs + delta
     setOffsetMs(next)
+    if (offsetKey) {
+      saveSyncOffset(offsetKey, next)
+      setOffsetSaved(next !== 0)
+    }
     if (!client || !isPlayingOurs || !selected) return
     if (syncTimer.current) clearTimeout(syncTimer.current)
     syncTimer.current = setTimeout(async () => {
@@ -224,6 +271,105 @@ function Main() {
       loadOnTv(position, next)
     }, 1200)
   }
+
+  // ---------- next episode ----------
+
+  // Once an episode plays, find the next one's stream + subtitle and put it in the TV's queue,
+  // so the Chromecast moves on by itself (even with the phone locked).
+  useEffect(() => {
+    if (!client || !connected || !isPlayingOurs || !stream || !settings || !imdbId) return
+    const next = details?.nextEpisode
+    if (!next || !settings.autoNext || preparedFor.current === stream.url) return
+    preparedFor.current = stream.url
+    const label = `S${String(next.season).padStart(2, '0')}E${String(next.episode).padStart(2, '0')}${next.name ? ` · ${next.name}` : ''}`
+    const addons = [...settings.streamAddons, addonFromStreamUrl(stream.url)].filter((a): a is string => !!a)
+    if (addons.length === 0) {
+      setNextUp({ status: 'noaddon', label })
+      return
+    }
+    setNextUp({ status: 'preparing', label })
+    ;(async () => {
+      try {
+        const candidate = await findEpisodeStream({
+          addons,
+          imdbId,
+          season: next.season,
+          episode: next.episode,
+          currentFilename: stream.filename,
+        })
+        if (!candidate) return setNextUp({ status: 'notfound', label })
+        const described = describeStream(candidate.url)
+        const nextStream: StreamInfo = {
+          ...described,
+          filename: candidate.filename ?? described.filename,
+          title: stream.title,
+          year: stream.year,
+          season: next.season,
+          episode: next.episode,
+        }
+
+        // Subtitle: same language as now if possible, else the first preferred language.
+        let subtitles: SubtitleOption[] = []
+        try {
+          const res = await searchSubtitles({ release: nextStream, filename: nextStream.filename, addons: settings.addons, imdbId })
+          subtitles = rankSubtitles(res.options, settings.languages)
+        } catch {
+          // play without subtitles rather than not at all
+        }
+        const wantLang = selected?.lang
+        const sub =
+          (wantLang ? subtitles.find((o) => o.lang === wantLang) : undefined) ??
+          subtitles.find((o) => settings.languages.includes(o.lang)) ??
+          null
+        const nextVideoId = stremioVideoId(imdbId, nextStream).id
+        const subOffset = sub ? ((await getSyncOffset(syncKey(nextVideoId, sub.url))) ?? 0) : 0
+        const vttUrl = sub && settings.relayUrl && isRemote(sub.url) ? relayVttUrl(settings.relayUrl, sub.url, subOffset) : null
+
+        const request = buildLoadRequest({
+          stream: nextStream,
+          vttUrl,
+          subtitleLang: sub?.lang,
+          subtitleName: sub ? langName(sub.lang) : undefined,
+          fontScale: settings.fontScale,
+          details: details
+            ? { ...details, episodeTitle: next.name, image: next.thumbnail ?? details.image, nextEpisode: undefined }
+            : null,
+        }) as unknown as { mediaInfo: Parameters<typeof client.queueInsertItem>[0]['mediaInfo'] }
+        await client.queueInsertItem({
+          mediaInfo: request.mediaInfo,
+          autoplay: true,
+          preloadTime: 30,
+          activeTrackIds: vttUrl ? [SUBTITLE_TRACK_ID] : [],
+        })
+        setNextUp({
+          status: 'ready',
+          label,
+          url: nextStream.url,
+          stream: nextStream,
+          subtitles,
+          subtitleKey: vttUrl && sub ? sub.key : NONE,
+          offsetMs: subOffset,
+        })
+      } catch {
+        setNextUp({ status: 'notfound', label })
+      }
+    })()
+  }, [client, connected, isPlayingOurs, stream, settings, imdbId, details, selected])
+
+  // The TV moved on to the queued episode: follow it in the app.
+  const tvUrl = mediaStatus?.mediaInfo?.contentUrl
+  useEffect(() => {
+    if (nextUp.status !== 'ready' || tvUrl !== nextUp.url) return
+    setStream(nextUp.stream)
+    setIncomingSubs([])
+    setFound(nextUp.subtitles)
+    setSearch({ status: 'done' })
+    setSelectedKey(nextUp.subtitleKey)
+    setOffsetMs(nextUp.offsetMs)
+    setCastError(null)
+    setNextUp({ status: 'idle' })
+    if (client) activateSubtitles(client, nextUp.subtitleKey !== NONE)
+  }, [tvUrl, nextUp, client])
 
   const playerState = mediaStatus?.playerState
   const isPaused = playerState === MediaPlayerState.PAUSED
@@ -371,12 +517,29 @@ function Main() {
               <View style={{ gap: 8 }}>
                 <Text style={styles.muted}>
                   {t.syncTitle}: {offsetMs > 0 ? '+' : ''}
-                  {(offsetMs / 1000).toFixed(2)}s
+                  {(offsetMs / 1000).toFixed(2)}s{offsetSaved ? ` · ${t.saved}` : ''}
                 </Text>
                 <View style={styles.row}>
                   <Button label={`◀ ${t.earlier}`} small style={{ flex: 1 }} onPress={() => nudgeSync(-SYNC_STEP_MS)} />
                   <Button label={`${t.later} ▶`} small style={{ flex: 1 }} onPress={() => nudgeSync(SYNC_STEP_MS)} />
                 </View>
+              </View>
+            )}
+            {nextUp.status !== 'idle' && (
+              <View style={[styles.selectRow, { gap: 6 }]}>
+                <Text style={styles.cardTitle}>{t.upNext}</Text>
+                {nextUp.label ? <Text style={styles.text}>{nextUp.label}</Text> : null}
+                {nextUp.status === 'preparing' && (
+                  <View style={styles.row}>
+                    <ActivityIndicator color={colors.accent} size="small" />
+                    <Text style={styles.muted}>{t.preparingNext}</Text>
+                  </View>
+                )}
+                {nextUp.status === 'notfound' && <Text style={styles.muted}>{t.nextNotFound}</Text>}
+                {nextUp.status === 'noaddon' && <Text style={styles.muted}>{t.nextNeedsAddon}</Text>}
+                {nextUp.status === 'ready' && (
+                  <Button label={`⏭ ${t.playNow}`} small onPress={() => client?.queueNext()} />
+                )}
               </View>
             )}
             <View style={styles.row}>
