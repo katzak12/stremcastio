@@ -14,11 +14,11 @@ export type SubtitleOption = {
 }
 
 export const OPENSUBTITLES_ADDON = 'https://opensubtitles-v3.strem.io'
-const CINEMETA = 'https://v3-cinemeta.strem.io'
+export const CINEMETA = 'https://v3-cinemeta.strem.io'
 
 type CinemetaMeta = { id: string; name: string; releaseInfo?: string; year?: string | number }
 
-async function getJson<T>(url: string, timeoutMs = 10000): Promise<T> {
+export async function getJson<T>(url: string, timeoutMs = 10000): Promise<T> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {

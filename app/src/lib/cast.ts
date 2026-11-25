@@ -1,19 +1,31 @@
 import type { MediaLoadRequest, MediaTrack, RemoteMediaClient, TextTrackStyle } from 'react-native-google-cast'
 import { normalizeLang } from './languages'
+import type { MediaDetails } from './meta'
 import type { StreamInfo } from './stream'
 
 export const SUBTITLE_TRACK_ID = 1
 
-export function textStyle(fontScale: number): TextTrackStyle {
+export type SubtitleLook = { fontScale: number; color: 'white' | 'yellow'; background: 'none' | 'box' }
+
+export function textStyle(look: SubtitleLook): TextTrackStyle {
+  const box = look.background === 'box'
   return {
-    fontScale,
-    foregroundColor: '#FFFFFFFF',
-    backgroundColor: '#00000000',
-    edgeType: 'outline',
+    fontScale: look.fontScale,
+    foregroundColor: look.color === 'yellow' ? '#FFD65CFF' : '#FFFFFFFF',
+    backgroundColor: box ? '#000000B3' : '#00000000',
+    edgeType: box ? 'none' : 'outline',
     edgeColor: '#000000FF',
     fontGenericFamily: 'sansSerif',
     windowType: 'none',
   } as TextTrackStyle
+}
+
+export type SleepMode = 'off' | 'end' | number
+
+/** Seconds of playback left before the sleep timer stops the TV; undefined = no limit. */
+export function sleepPlaybackDuration(mode: SleepMode, endsAt: number | null, now = Date.now()): number | undefined {
+  if (typeof mode !== 'number' || !endsAt) return undefined
+  return Math.max(5, Math.round((endsAt - now) / 1000))
 }
 
 export function buildLoadRequest(opts: {
@@ -21,8 +33,11 @@ export function buildLoadRequest(opts: {
   vttUrl: string | null
   subtitleLang?: string
   subtitleName?: string
-  fontScale: number
+  look: SubtitleLook
   startTime?: number
+  details?: MediaDetails | null
+  /** Stop playback on the TV after this many seconds (sleep timer). */
+  playbackDuration?: number
 }): MediaLoadRequest {
   const tracks: MediaTrack[] = opts.vttUrl
     ? [
@@ -38,26 +53,74 @@ export function buildLoadRequest(opts: {
       ]
     : []
 
-  const title =
-    opts.stream.season !== undefined && opts.stream.episode !== undefined
-      ? `${opts.stream.title} S${String(opts.stream.season).padStart(2, '0')}E${String(opts.stream.episode).padStart(2, '0')}`
-      : opts.stream.title
+  const metadata = buildMetadata(opts.stream, opts.details)
+
+  const activeTrackIds = tracks.length ? [SUBTITLE_TRACK_ID] : []
+  if (opts.playbackDuration !== undefined) {
+    // The TV itself stops after playbackDuration, so the timer works with the phone locked.
+    // Loading a one-item queue also drops any queued next episode.
+    const mediaInfo = buildLoadRequestInfo(opts.stream, tracks, metadata, opts.look)
+    return {
+      autoplay: true,
+      startTime: opts.startTime ?? 0,
+      queueData: {
+        startIndex: 0,
+        items: [
+          {
+            mediaInfo,
+            autoplay: true,
+            startTime: opts.startTime ?? 0,
+            playbackDuration: opts.playbackDuration,
+            activeTrackIds,
+          },
+        ],
+      },
+    } as unknown as MediaLoadRequest
+  }
 
   const request = {
     autoplay: true,
     startTime: opts.startTime ?? 0,
-    mediaInfo: {
-      contentUrl: opts.stream.url,
-      contentType: opts.stream.contentType,
-      streamType: 'buffered',
-      metadata: { type: 'movie', title, subtitle: opts.stream.filename },
-      mediaTracks: tracks,
-      textTrackStyle: textStyle(opts.fontScale),
-    },
+    mediaInfo: buildLoadRequestInfo(opts.stream, tracks, metadata, opts.look),
     // Honoured by the iOS bridge; on Android we set it after loading (see activateSubtitles).
-    activeTrackIds: tracks.length ? [SUBTITLE_TRACK_ID] : [],
+    activeTrackIds,
   }
   return request as unknown as MediaLoadRequest
+}
+
+function buildLoadRequestInfo(stream: StreamInfo, tracks: MediaTrack[], metadata: Record<string, unknown>, look: SubtitleLook) {
+  return {
+    contentUrl: stream.url,
+    contentType: stream.contentType,
+    streamType: 'buffered',
+    metadata,
+    mediaTracks: tracks,
+    textTrackStyle: textStyle(look),
+  } as never
+}
+
+/** What the TV shows while loading/paused: title, episode info and artwork. */
+export function buildMetadata(stream: StreamInfo, details?: MediaDetails | null): Record<string, unknown> {
+  const images = [details?.poster, details?.image].filter((u): u is string => !!u).map((url) => ({ url }))
+  const isEpisode = stream.season !== undefined && stream.episode !== undefined
+  if (isEpisode) {
+    const code = `S${String(stream.season).padStart(2, '0')}E${String(stream.episode).padStart(2, '0')}`
+    const series = details?.name ?? stream.title
+    return {
+      type: 'tvShow',
+      seriesTitle: series,
+      title: details?.episodeTitle ? `${code} · ${details.episodeTitle}` : `${series} ${code}`,
+      seasonNumber: stream.season,
+      episodeNumber: stream.episode,
+      images,
+    }
+  }
+  return {
+    type: 'movie',
+    title: details?.name ?? stream.title,
+    subtitle: details?.year ?? (stream.year ? String(stream.year) : stream.filename),
+    images,
+  }
 }
 
 /** Turn the subtitle track on once the receiver has a media session. Retries briefly. */

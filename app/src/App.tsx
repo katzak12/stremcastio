@@ -1,32 +1,51 @@
 import * as Clipboard from 'expo-clipboard'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import GoogleCast, {
   CastButton,
   CastState,
   MediaPlayerState,
   useCastDevice,
+  useCastSession,
   useCastState,
   useMediaStatus,
   useRemoteMediaClient,
+  useStreamPosition,
 } from 'react-native-google-cast'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { SettingsModal } from './components/SettingsModal'
-import { Badge, Button, Card, colors, styles } from './components/ui'
-import { activateSubtitles, buildLoadRequest } from './lib/cast'
-import { t } from './lib/i18n'
+import { Badge, Button, Card, Chips, colors, styles } from './components/ui'
+import { activateSubtitles, buildLoadRequest, sleepPlaybackDuration, SUBTITLE_TRACK_ID, textStyle, type SleepMode, type SubtitleLook } from './lib/cast'
+import { setAppLanguage, t } from './lib/i18n'
 import { useIncoming, type Incoming } from './lib/incoming'
 import { langName } from './lib/languages'
+import { fetchDetails, formatClock, formatRuntime, type MediaDetails } from './lib/meta'
 import { isRemote, relayVttUrl, uploadLocalSubtitle } from './lib/relay'
+import { addonFromStreamUrl, findEpisodeStream } from './lib/streams'
+import { clearResume, getResume, saveResume } from './lib/resume'
+import { getSyncOffset, saveSyncOffset, syncKey } from './lib/syncMemory'
 import { useSettings } from './lib/settings'
 import { describeStream, extractUrl, type StreamInfo } from './lib/stream'
-import { rankSubtitles, searchSubtitles, type SubtitleOption } from './lib/subtitles'
+import { lookupImdbId, rankSubtitles, searchSubtitles, stremioVideoId, type SubtitleOption } from './lib/subtitles'
 
 type SearchState = { status: 'idle' | 'searching' | 'done'; message?: string }
 
+type NextUp =
+  | { status: 'idle' | 'preparing' | 'notfound' | 'noaddon'; label?: string }
+  | {
+      status: 'ready'
+      label: string
+      url: string
+      stream: StreamInfo
+      subtitles: SubtitleOption[]
+      subtitleKey: string
+      offsetMs: number
+    }
+
 const NONE = 'none'
 const SYNC_STEP_MS = 250
+const ICON_SIZE = 32
 
 export default function App() {
   return (
@@ -38,6 +57,7 @@ export default function App() {
 
 function Main() {
   const { settings, update } = useSettings()
+  setAppLanguage(settings?.appLanguage)
   const [showSettings, setShowSettings] = useState(false)
 
   const [stream, setStream] = useState<StreamInfo | null>(null)
@@ -52,6 +72,13 @@ function Main() {
   const [busy, setBusy] = useState(false)
   const [castError, setCastError] = useState<string | null>(null)
   const [pendingCast, setPendingCast] = useState(false)
+  const [details, setDetails] = useState<MediaDetails | null>(null)
+  const [imdbId, setImdbId] = useState<string | null>(null)
+  const [offsetSaved, setOffsetSaved] = useState(false)
+  const [nextUp, setNextUp] = useState<NextUp>({ status: 'idle' })
+  const preparedFor = useRef<string | null>(null)
+  const [sleep, setSleep] = useState<SleepMode>('off')
+  const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null)
 
   const castState = useCastState()
   const client = useRemoteMediaClient()
@@ -59,6 +86,29 @@ function Main() {
   const mediaStatus = useMediaStatus()
   const connected = castState === CastState.CONNECTED && client != null
   const isPlayingOurs = !!mediaStatus?.mediaInfo && mediaStatus.mediaInfo.contentUrl === stream?.url
+  const position = useStreamPosition(1)
+
+  // One IMDb lookup per stream, shared by the subtitle search and the artwork/rating.
+  const imdbLookup = useMemo(() => (stream ? lookupImdbId(stream).catch(() => null) : null), [stream])
+
+  useEffect(() => {
+    setDetails(null)
+    setImdbId(null)
+    if (!stream || !imdbLookup) return
+    let cancelled = false
+    imdbLookup
+      .then((imdb) => {
+        if (!cancelled) setImdbId(imdb?.id ?? null)
+        return imdb ? fetchDetails(imdb.id, stream) : null
+      })
+      .then((d) => {
+        if (!cancelled) setDetails(d)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [stream, imdbLookup])
 
   // ---------- incoming streams ----------
 
@@ -72,6 +122,8 @@ function Main() {
     setOffsetMs(0)
     setCastError(null)
     setLinkInput('')
+    setNextUp({ status: 'idle' })
+    preparedFor.current = null
   }, [])
 
   useIncoming(
@@ -90,7 +142,12 @@ function Main() {
     if (!stream || !settings) return
     setSearch({ status: 'searching' })
     try {
-      const res = await searchSubtitles({ release: stream, filename: stream.filename, addons: settings.addons })
+      const imdb = await imdbLookup
+      if (!imdb) {
+        setSearch({ status: 'done', message: t.titleNotFound })
+        return
+      }
+      const res = await searchSubtitles({ release: stream, filename: stream.filename, addons: settings.addons, imdbId: imdb.id })
       const ranked = rankSubtitles(res.options, settings.languages)
       setFound(ranked)
       setSearch({
@@ -105,7 +162,7 @@ function Main() {
     } catch (e) {
       setSearch({ status: 'done', message: `${t.error}: ${e instanceof Error ? e.message : String(e)}` })
     }
-  }, [stream, settings])
+  }, [stream, settings, imdbLookup])
 
   useEffect(() => {
     if (stream && settings?.autoSearch && search.status === 'idle') runSearch()
@@ -127,6 +184,25 @@ function Main() {
 
   const selected = allOptions.find((o) => o.key === selectedKey) ?? null
 
+  // ---------- remembered subtitle sync ----------
+
+  const videoId = imdbId && stream ? stremioVideoId(imdbId, stream).id : null
+  const offsetKey = videoId && selected ? syncKey(videoId, selected.url) : null
+
+  useEffect(() => {
+    setOffsetSaved(false)
+    if (!offsetKey) return
+    let cancelled = false
+    getSyncOffset(offsetKey).then((ms) => {
+      if (cancelled) return
+      setOffsetMs(ms ?? 0)
+      setOffsetSaved(ms != null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [offsetKey])
+
   // ---------- casting ----------
 
   const resolveVtt = useCallback(
@@ -138,9 +214,13 @@ function Main() {
     [settings],
   )
 
+  const look: SubtitleLook | null = settings
+    ? { fontScale: settings.fontScale, color: settings.subtitleColor, background: settings.subtitleBackground }
+    : null
+
   const loadOnTv = useCallback(
-    async (startTime = 0, offset = offsetMs) => {
-      if (!client || !stream || !settings) return
+    async (startTime = 0, offset = offsetMs, sleepState: { mode: SleepMode; endsAt: number | null } = { mode: sleep, endsAt: sleepEndsAt }) => {
+      if (!client || !stream || !settings || !look) return
       setBusy(true)
       setCastError(null)
       try {
@@ -150,9 +230,14 @@ function Main() {
           vttUrl,
           subtitleLang: selected?.lang,
           subtitleName: selected ? langName(selected.lang) : undefined,
-          fontScale: settings.fontScale,
+          look,
           startTime,
+          details,
+          playbackDuration: sleepPlaybackDuration(sleepState.mode, sleepState.endsAt),
         })
+        // A fresh load replaces the TV's queue, so line up the next episode again afterwards.
+        preparedFor.current = null
+        setNextUp({ status: 'idle' })
         await client.loadMedia(request)
         await activateSubtitles(client, vttUrl != null)
       } catch (e) {
@@ -161,11 +246,44 @@ function Main() {
         setBusy(false)
       }
     },
-    [client, stream, settings, selected, offsetMs, resolveVtt],
+    [client, stream, settings, selected, offsetMs, resolveVtt, details, sleep, sleepEndsAt],
   )
 
+  // ---------- continue watching ----------
+
+  const resumeKeys = useMemo(
+    () => [videoId ? `id:${videoId}` : null, stream ? `file:${stream.filename}` : null].filter((k): k is string => !!k),
+    [videoId, stream],
+  )
+
+  /** Start casting; if we stopped halfway last time, ask whether to continue there. */
+  const startCasting = useCallback(async () => {
+    let saved: Awaited<ReturnType<typeof getResume>> = null
+    for (const key of resumeKeys) {
+      saved = await getResume(key)
+      if (saved) break
+    }
+    if (!saved) return loadOnTv(0)
+    const pos = saved.pos
+    Alert.alert(t.continueTitle, details?.name ?? stream?.title, [
+      { text: `${t.resumeFrom} ${formatClock(pos)}`, onPress: () => loadOnTv(pos) },
+      { text: t.startOver, onPress: () => loadOnTv(0) },
+      { text: t.cancel, style: 'cancel' },
+    ])
+  }, [resumeKeys, loadOnTv, details, stream])
+
+  // Remember the position every 10 s while our video plays.
+  const lastResumeSave = useRef(0)
+  const duration = mediaStatus?.mediaInfo?.streamDuration ?? 0
+  useEffect(() => {
+    if (!isPlayingOurs || position == null || position < 1) return
+    if (Date.now() - lastResumeSave.current < 10000) return
+    lastResumeSave.current = Date.now()
+    for (const key of resumeKeys) saveResume(key, position, duration)
+  }, [isPlayingOurs, position, duration, resumeKeys])
+
   const onCastPress = async () => {
-    if (connected) return loadOnTv(0)
+    if (connected) return startCasting()
     setPendingCast(true)
     try {
       await GoogleCast.showCastDialog()
@@ -178,21 +296,175 @@ function Main() {
   useEffect(() => {
     if (pendingCast && connected) {
       setPendingCast(false)
-      loadOnTv(0)
+      startCasting()
     }
-  }, [pendingCast, connected, loadOnTv])
+  }, [pendingCast, connected, startCasting])
 
   // Subtitle sync: reload at the current position with a shifted subtitle (debounced).
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const nudgeSync = (delta: number) => {
     const next = offsetMs + delta
     setOffsetMs(next)
+    if (offsetKey) {
+      saveSyncOffset(offsetKey, next)
+      setOffsetSaved(next !== 0)
+    }
     if (!client || !isPlayingOurs || !selected) return
     if (syncTimer.current) clearTimeout(syncTimer.current)
     syncTimer.current = setTimeout(async () => {
       const position = (await client.getStreamPosition()) ?? 0
       loadOnTv(position, next)
     }, 1200)
+  }
+
+  // ---------- next episode ----------
+
+  // Once an episode plays, find the next one's stream + subtitle and put it in the TV's queue,
+  // so the Chromecast moves on by itself (even with the phone locked).
+  useEffect(() => {
+    if (!client || !connected || !isPlayingOurs || !stream || !settings || !imdbId) return
+    const next = details?.nextEpisode
+    if (!next || !settings.autoNext || sleep !== 'off' || preparedFor.current === stream.url) return
+    preparedFor.current = stream.url
+    const label = `S${String(next.season).padStart(2, '0')}E${String(next.episode).padStart(2, '0')}${next.name ? ` · ${next.name}` : ''}`
+    const addons = [...settings.streamAddons, addonFromStreamUrl(stream.url)].filter((a): a is string => !!a)
+    if (addons.length === 0) {
+      setNextUp({ status: 'noaddon', label })
+      return
+    }
+    setNextUp({ status: 'preparing', label })
+    ;(async () => {
+      try {
+        const candidate = await findEpisodeStream({
+          addons,
+          imdbId,
+          season: next.season,
+          episode: next.episode,
+          currentFilename: stream.filename,
+        })
+        if (!candidate) return setNextUp({ status: 'notfound', label })
+        const described = describeStream(candidate.url)
+        const nextStream: StreamInfo = {
+          ...described,
+          filename: candidate.filename ?? described.filename,
+          title: stream.title,
+          year: stream.year,
+          season: next.season,
+          episode: next.episode,
+        }
+
+        // Subtitle: same language as now if possible, else the first preferred language.
+        let subtitles: SubtitleOption[] = []
+        try {
+          const res = await searchSubtitles({ release: nextStream, filename: nextStream.filename, addons: settings.addons, imdbId })
+          subtitles = rankSubtitles(res.options, settings.languages)
+        } catch {
+          // play without subtitles rather than not at all
+        }
+        const wantLang = selected?.lang
+        const sub =
+          (wantLang ? subtitles.find((o) => o.lang === wantLang) : undefined) ??
+          subtitles.find((o) => settings.languages.includes(o.lang)) ??
+          null
+        const nextVideoId = stremioVideoId(imdbId, nextStream).id
+        const subOffset = sub ? ((await getSyncOffset(syncKey(nextVideoId, sub.url))) ?? 0) : 0
+        const vttUrl = sub && settings.relayUrl && isRemote(sub.url) ? relayVttUrl(settings.relayUrl, sub.url, subOffset) : null
+
+        const request = buildLoadRequest({
+          stream: nextStream,
+          vttUrl,
+          subtitleLang: sub?.lang,
+          subtitleName: sub ? langName(sub.lang) : undefined,
+          look: look ?? { fontScale: settings.fontScale, color: 'white', background: 'none' },
+          details: details
+            ? { ...details, episodeTitle: next.name, image: next.thumbnail ?? details.image, nextEpisode: undefined }
+            : null,
+        }) as unknown as { mediaInfo: Parameters<typeof client.queueInsertItem>[0]['mediaInfo'] }
+        await client.queueInsertItem({
+          mediaInfo: request.mediaInfo,
+          autoplay: true,
+          preloadTime: 30,
+          activeTrackIds: vttUrl ? [SUBTITLE_TRACK_ID] : [],
+        })
+        setNextUp({
+          status: 'ready',
+          label,
+          url: nextStream.url,
+          stream: nextStream,
+          subtitles,
+          subtitleKey: vttUrl && sub ? sub.key : NONE,
+          offsetMs: subOffset,
+        })
+      } catch {
+        setNextUp({ status: 'notfound', label })
+      }
+    })()
+  }, [client, connected, isPlayingOurs, stream, settings, imdbId, details, selected, sleep])
+
+  // The TV moved on to the queued episode: follow it in the app.
+  const tvUrl = mediaStatus?.mediaInfo?.contentUrl
+  useEffect(() => {
+    if (nextUp.status !== 'ready' || tvUrl !== nextUp.url) return
+    for (const key of resumeKeys) clearResume(key)
+    setStream(nextUp.stream)
+    setIncomingSubs([])
+    setFound(nextUp.subtitles)
+    setSearch({ status: 'done' })
+    setSelectedKey(nextUp.subtitleKey)
+    setOffsetMs(nextUp.offsetMs)
+    setCastError(null)
+    setNextUp({ status: 'idle' })
+    if (client) activateSubtitles(client, nextUp.subtitleKey !== NONE)
+  }, [tvUrl, nextUp, client])
+
+  // ---------- sleep timer ----------
+
+  const chooseSleep = async (mode: SleepMode) => {
+    const endsAt = typeof mode === 'number' ? Date.now() + mode * 60000 : null
+    const wasTimed = typeof sleep === 'number'
+    setSleep(mode)
+    setSleepEndsAt(endsAt)
+    // Timed: the TV must know the limit (works with the phone locked), which needs a reload at the
+    // current position. "End of video": only drop the queued next episode. "Off" after a timer: lift the limit.
+    const needsReload = typeof mode === 'number' || wasTimed || (mode === 'end' && nextUp.status === 'ready')
+    if (client && isPlayingOurs && needsReload) {
+      const pos = (await client.getStreamPosition()) ?? 0
+      loadOnTv(pos, offsetMs, { mode, endsAt })
+    }
+    if (mode === 'off') preparedFor.current = null
+  }
+
+  // Back-up for while the app is open: stop exactly on time, then reset.
+  useEffect(() => {
+    if (!sleepEndsAt) return
+    const timer = setTimeout(() => {
+      client?.stop().catch(() => {})
+      setSleep('off')
+      setSleepEndsAt(null)
+    }, Math.max(0, sleepEndsAt - Date.now()))
+    return () => clearTimeout(timer)
+  }, [sleepEndsAt, client])
+
+  // ---------- subtitle style, live ----------
+
+  const lookJson = look ? JSON.stringify(look) : ''
+  const appliedLook = useRef(lookJson)
+  useEffect(() => {
+    if (!client || !isPlayingOurs || !look || lookJson === appliedLook.current) return
+    appliedLook.current = lookJson
+    client.setTextTrackStyle(textStyle(look)).catch(() => {})
+  }, [lookJson, client, isPlayingOurs])
+
+  // ---------- audio tracks ----------
+
+  // Only offered when the TV reports more than one audio track (HLS/DASH streams usually do;
+  // most single-file MKV/MP4 streams do not, and then this simply stays hidden).
+  const audioTracks = (mediaStatus?.mediaInfo?.mediaTracks ?? []).filter((tr) => tr.type === 'audio')
+  const activeIds = mediaStatus?.activeTrackIds ?? []
+  const activeAudio = audioTracks.find((tr) => activeIds.includes(tr.id))?.id ?? audioTracks[0]?.id
+  const chooseAudio = (id: number) => {
+    const audioIds = new Set(audioTracks.map((tr) => tr.id))
+    client?.setActiveTrackIds([id, ...activeIds.filter((x) => !audioIds.has(x))]).catch(() => {})
   }
 
   const playerState = mediaStatus?.playerState
@@ -215,9 +487,14 @@ function Main() {
           <Text style={styles.muted}>{t.tagline}</Text>
         </View>
         <View style={styles.row}>
-          <CastButton style={{ width: 32, height: 32, tintColor: colors.text }} />
-          <Pressable accessibilityLabel={t.settings} onPress={() => setShowSettings(true)} hitSlop={12}>
-            <Text style={{ color: colors.text, fontSize: 24 }}>⚙︎</Text>
+          <CastButton style={{ width: ICON_SIZE, height: ICON_SIZE, tintColor: colors.text }} />
+          <Pressable
+            accessibilityLabel={t.settings}
+            onPress={() => setShowSettings(true)}
+            hitSlop={12}
+            style={{ width: ICON_SIZE, height: ICON_SIZE, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text style={{ color: colors.text, fontSize: ICON_SIZE, lineHeight: ICON_SIZE + 2 }}>⚙︎</Text>
           </Pressable>
         </View>
       </View>
@@ -226,19 +503,7 @@ function Main() {
         {/* ---------- video ---------- */}
         <Card title={t.videoTitle}>
           {stream ? (
-            <View style={{ gap: 6 }}>
-              <Text style={[styles.text, { fontSize: 19, fontWeight: '700' }]}>
-                {stream.title}
-                {stream.year ? ` (${stream.year})` : ''}
-                {stream.season !== undefined
-                  ? `  S${String(stream.season).padStart(2, '0')}E${String(stream.episode ?? 0).padStart(2, '0')}`
-                  : ''}
-              </Text>
-              <Text style={styles.muted} numberOfLines={2}>
-                {stream.filename}
-              </Text>
-              {stream.isLocalOnly && <Text style={{ color: colors.warn }}>{t.localOnly}</Text>}
-            </View>
+            <VideoInfo stream={stream} details={details} />
           ) : (
             <Text style={styles.muted}>{t.noVideo}</Text>
           )}
@@ -339,16 +604,74 @@ function Main() {
               />
               <Button label="+10s" onPress={() => client?.seek({ position: 10, relative: true })} />
             </View>
+            <ProgressBar
+              position={position ?? mediaStatus?.streamPosition ?? 0}
+              duration={mediaStatus?.mediaInfo?.streamDuration ?? 0}
+              onSeek={(p) => client?.seek({ position: p })}
+            />
+            <VolumeControl />
             {selected && (
               <View style={{ gap: 8 }}>
                 <Text style={styles.muted}>
                   {t.syncTitle}: {offsetMs > 0 ? '+' : ''}
-                  {(offsetMs / 1000).toFixed(2)}s
+                  {(offsetMs / 1000).toFixed(2)}s{offsetSaved ? ` · ${t.saved}` : ''}
                 </Text>
                 <View style={styles.row}>
                   <Button label={`◀ ${t.earlier}`} small style={{ flex: 1 }} onPress={() => nudgeSync(-SYNC_STEP_MS)} />
                   <Button label={`${t.later} ▶`} small style={{ flex: 1 }} onPress={() => nudgeSync(SYNC_STEP_MS)} />
                 </View>
+              </View>
+            )}
+            {audioTracks.length > 1 && activeAudio !== undefined && (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.muted}>{t.audio}</Text>
+                <Chips
+                  options={audioTracks.map((tr, i) => ({
+                    value: tr.id,
+                    label: tr.name || (tr.language ? langName(tr.language) : `${t.audio} ${i + 1}`),
+                  }))}
+                  value={activeAudio}
+                  onChange={chooseAudio}
+                />
+              </View>
+            )}
+            <View style={{ gap: 8 }}>
+              <Text style={styles.muted}>
+                {t.sleepTimer}
+                {typeof sleep === 'number' && sleepEndsAt
+                  ? ` · ${t.stopsAt} ${new Date(sleepEndsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : sleep === 'end'
+                    ? ` · ${t.stopsAfterThis}`
+                    : ''}
+              </Text>
+              <Chips<SleepMode>
+                options={[
+                  { value: 'off', label: t.off },
+                  { value: 'end', label: t.endOfVideo },
+                  { value: 15, label: '15 min' },
+                  { value: 30, label: '30 min' },
+                  { value: 60, label: '60 min' },
+                  { value: 90, label: '90 min' },
+                ]}
+                value={sleep}
+                onChange={chooseSleep}
+              />
+            </View>
+            {nextUp.status !== 'idle' && (
+              <View style={[styles.selectRow, { gap: 6 }]}>
+                <Text style={styles.cardTitle}>{t.upNext}</Text>
+                {nextUp.label ? <Text style={styles.text}>{nextUp.label}</Text> : null}
+                {nextUp.status === 'preparing' && (
+                  <View style={styles.row}>
+                    <ActivityIndicator color={colors.accent} size="small" />
+                    <Text style={styles.muted}>{t.preparingNext}</Text>
+                  </View>
+                )}
+                {nextUp.status === 'notfound' && <Text style={styles.muted}>{t.nextNotFound}</Text>}
+                {nextUp.status === 'noaddon' && <Text style={styles.muted}>{t.nextNeedsAddon}</Text>}
+                {nextUp.status === 'ready' && (
+                  <Button label={`⏭ ${t.playNow}`} small onPress={() => client?.queueNext()} />
+                )}
               </View>
             )}
             <View style={styles.row}>
@@ -418,5 +741,178 @@ function SubtitleRow(props: { active: boolean; onPress: () => void; lang: string
       </View>
       {props.active && <Text style={{ color: colors.accent, fontSize: 18 }}>✓</Text>}
     </Pressable>
+  )
+}
+
+function VideoInfo({ stream, details }: { stream: StreamInfo; details: MediaDetails | null }) {
+  const episodeCode =
+    stream.season !== undefined
+      ? `S${String(stream.season).padStart(2, '0')}E${String(stream.episode ?? 0).padStart(2, '0')}`
+      : undefined
+  const facts = [
+    details?.year ?? (stream.year ? String(stream.year) : undefined),
+    formatRuntime(details?.runtimeMinutes),
+    ...(details?.genres ?? []).slice(0, 2),
+  ].filter(Boolean)
+
+  return (
+    <View style={{ gap: 10 }}>
+      {details?.image ? (
+        <Image
+          source={{ uri: details.image }}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+          style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: '#11131A' }}
+        />
+      ) : null}
+      <View style={{ gap: 4 }}>
+        <Text style={[styles.text, { fontSize: 19, fontWeight: '700' }]}>{details?.name ?? stream.title}</Text>
+        {episodeCode ? (
+          <Text style={[styles.text, { color: colors.muted }]}>
+            {episodeCode}
+            {details?.episodeTitle ? ` · ${details.episodeTitle}` : ''}
+          </Text>
+        ) : null}
+        <View style={[styles.row, { flexWrap: 'wrap', gap: 8 }]}>
+          {details?.rating ? (
+            <View style={styles.imdb}>
+              <Text style={styles.imdbText}>IMDb</Text>
+              <Text style={[styles.text, { fontSize: 14, fontWeight: '700' }]}>★ {details.rating.toFixed(1)}</Text>
+            </View>
+          ) : null}
+          {facts.length > 0 && <Text style={styles.muted}>{facts.join(' · ')}</Text>}
+        </View>
+      </View>
+      {details?.description ? (
+        <Text style={styles.muted} numberOfLines={3}>
+          {details.description}
+        </Text>
+      ) : null}
+      <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
+        {stream.filename}
+      </Text>
+      {stream.isLocalOnly && <Text style={{ color: colors.warn }}>{t.localOnly}</Text>}
+    </View>
+  )
+}
+
+/** Tap anywhere on the bar to jump there. */
+function ProgressBar({ position, duration, onSeek }: { position: number; duration: number; onSeek: (p: number) => void }) {
+  const [width, setWidth] = useState(0)
+  const progress = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0
+  return (
+    <View style={{ gap: 6 }}>
+      <Pressable
+        disabled={duration <= 0}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onPress={(e) => width > 0 && onSeek((e.nativeEvent.locationX / width) * duration)}
+        hitSlop={{ top: 14, bottom: 14 }}
+        style={{ height: 6, borderRadius: 3, backgroundColor: '#2C303C', justifyContent: 'center' }}
+      >
+        <View pointerEvents="none" style={{ width: `${progress * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.accent }} />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: Math.max(0, progress * width - 7),
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: colors.text,
+          }}
+        />
+      </Pressable>
+      <View style={[styles.row, { justifyContent: 'space-between' }]}>
+        <Text style={[styles.muted, { fontSize: 12 }]}>{formatClock(position)}</Text>
+        {duration > 0 && (
+          <Text style={[styles.muted, { fontSize: 12 }]}>
+            −{formatClock(duration - position)} {t.left}
+          </Text>
+        )}
+      </View>
+    </View>
+  )
+}
+
+/** Chromecast volume: drag or tap the bar, or use − / +. */
+function VolumeControl() {
+  const session = useCastSession()
+  const [volume, setVolume] = useState<number | null>(null)
+  const [width, setWidth] = useState(0)
+  const lastSent = useRef(0)
+  const dragging = useRef(false)
+
+  // Follow changes made elsewhere (TV remote, other phones).
+  useEffect(() => {
+    if (!session) return
+    let alive = true
+    const poll = () =>
+      session
+        .getVolume()
+        .then((v) => alive && !dragging.current && setVolume(v))
+        .catch(() => {})
+    poll()
+    const timer = setInterval(poll, 2000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [session])
+
+  if (!session || volume == null) return null
+
+  const send = (v: number, force = false) => {
+    const clamped = Math.round(Math.min(1, Math.max(0, v)) * 100) / 100
+    setVolume(clamped)
+    if (force || Date.now() - lastSent.current > 120) {
+      lastSent.current = Date.now()
+      session.setVolume(clamped)
+    }
+  }
+  const fromX = (x: number) => (width > 0 ? x / width : volume)
+
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={styles.muted}>
+        {t.volume} · {Math.round(volume * 100)}%
+      </Text>
+      <View style={styles.row}>
+        <Button label="−" small onPress={() => send(volume - 0.05, true)} />
+        <View
+          style={{ flex: 1, height: 32, justifyContent: 'center' }}
+          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={(e) => {
+            dragging.current = true
+            send(fromX(e.nativeEvent.locationX))
+          }}
+          onResponderMove={(e) => send(fromX(e.nativeEvent.locationX))}
+          onResponderRelease={(e) => {
+            send(fromX(e.nativeEvent.locationX), true)
+            dragging.current = false
+          }}
+          onResponderTerminate={() => {
+            dragging.current = false
+          }}
+        >
+          <View pointerEvents="none" style={{ height: 6, borderRadius: 3, backgroundColor: '#2C303C' }}>
+            <View style={{ width: `${volume * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.accent }} />
+          </View>
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: Math.max(0, volume * width - 9),
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: colors.text,
+            }}
+          />
+        </View>
+        <Button label="+" small onPress={() => send(volume + 0.05, true)} />
+      </View>
+    </View>
   )
 }

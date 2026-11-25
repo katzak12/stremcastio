@@ -1,38 +1,43 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
-import { getLocales } from 'expo-localization'
 import { useCallback, useEffect, useState } from 'react'
-import { normalizeLang } from './languages'
+import { withEnglishFirst } from './languages'
 import { OPENSUBTITLES_ADDON } from './subtitles'
 
 export type Settings = {
-  /** Subtitle languages in order of preference, 2-letter keys. */
+  /** Subtitle languages in order of preference, 2-letter keys. English is always first. */
   languages: string[]
+  /** UI language (see APP_LANGUAGES in i18n). */
+  appLanguage: string
   /** Stremio subtitle add-on URLs (manifest or base). */
   addons: string[]
   relayUrl: string
   /** Chromecast subtitle size, 1 = receiver default. */
   fontScale: number
+  subtitleColor: 'white' | 'yellow'
+  subtitleBackground: 'none' | 'box'
   autoSearch: boolean
+  /** Stremio stream add-ons (e.g. Torrentio with debrid), for the next episode. */
+  streamAddons: string[]
+  autoNext: boolean
 }
 
 const KEY = 'stremcastio.settings.v1'
 
-function defaultLanguages(): string[] {
-  const langs = getLocales()
-    .map((l) => normalizeLang(l.languageCode))
-    .filter((l) => l !== 'und')
-  return [...new Set([...langs, 'en'])].slice(0, 3)
-}
 
 export function defaultSettings(): Settings {
   const extra = (Constants.expoConfig?.extra ?? {}) as { relayUrl?: string }
   return {
-    languages: defaultLanguages(),
+    languages: ['en'],
+    appLanguage: 'en',
     addons: [OPENSUBTITLES_ADDON],
     relayUrl: extra.relayUrl ?? '',
     fontScale: 1.2,
+    subtitleColor: 'white',
+    subtitleBackground: 'none',
     autoSearch: true,
+    streamAddons: [],
+    autoNext: true,
   }
 }
 
@@ -48,7 +53,7 @@ export async function loadSettings(): Promise<Settings> {
       // An empty relay in storage falls back to the build-time default.
       relayUrl: saved.relayUrl || defaults.relayUrl,
       addons: saved.addons?.length ? saved.addons : defaults.addons,
-      languages: saved.languages?.length ? saved.languages : defaults.languages,
+      languages: withEnglishFirst(saved.languages ?? []),
     }
   } catch {
     return defaults
@@ -65,6 +70,7 @@ export function useSettings() {
   const update = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => {
       const next = { ...(prev ?? defaultSettings()), ...patch }
+      next.languages = withEnglishFirst(next.languages)
       AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => {})
       return next
     })
