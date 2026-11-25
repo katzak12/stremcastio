@@ -14,6 +14,8 @@ export type Settings = {
   relayUrl: string
   /** Chromecast subtitle size, 1 = receiver default. */
   fontScale: number
+  subtitleColor: 'white' | 'yellow'
+  subtitleBackground: 'none' | 'box'
   autoSearch: boolean
   /** Stremio stream add-ons (e.g. Torrentio with debrid), for the next episode. */
   streamAddons: string[]
@@ -31,6 +33,8 @@ export function defaultSettings(): Settings {
     addons: [OPENSUBTITLES_ADDON],
     relayUrl: extra.relayUrl ?? '',
     fontScale: 1.2,
+    subtitleColor: 'white',
+    subtitleBackground: 'none',
     autoSearch: true,
     streamAddons: [],
     autoNext: true,

@@ -38,6 +38,10 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   Also: subtitle sync remembered per video + subtitle file (`syncMemory.ts`); automatic next episode: while an episode
   plays, the next one's stream (via a Stremio stream add-on, `streams.ts`; Torrentio debrid links are auto-detected)
   plus subtitle is put in the Chromecast queue. New, simpler app icon (play triangle + subtitle bars).
+  Also: continue watching (`resume.ts`, asks on cast), sleep timer (TV-side via a one-item queue with
+  `playbackDuration`, plus an in-app backup timer; "end of video" drops the queued next episode), Chromecast volume
+  slider (CastSession get/setVolume), audio-track picker (only shown when the TV reports >1 audio track, i.e. mostly
+  HLS/DASH), subtitle colour/background options applied live via setTextTrackStyle.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions

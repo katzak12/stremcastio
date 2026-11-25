@@ -66,6 +66,44 @@ export function Button({ label, onPress, kind = 'secondary', disabled, loading, 
   )
 }
 
+/** A row of pill buttons; one is active. */
+export function Chips<T extends string | number>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+      {options.map((o) => {
+        const active = o.value === value
+        return (
+          <Pressable
+            key={String(o.value)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => onChange(o.value)}
+            style={({ pressed }) => [
+              {
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 999,
+                backgroundColor: active ? colors.accent : '#242733',
+              },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={{ color: colors.text, fontWeight: active ? '700' : '500' }}>{o.label}</Text>
+          </Pressable>
+        )
+      })}
+    </View>
+  )
+}
+
 export function Badge({ text, tone = 'default' }: { text: string; tone?: 'default' | 'accent' }) {
   return (
     <View style={[styles.badge, tone === 'accent' && { backgroundColor: colors.accent }]}>
@@ -135,6 +173,15 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     paddingHorizontal: 6,
     paddingVertical: 3,
+  },
+  preview: {
+    height: 84,
+    borderRadius: 12,
+    backgroundColor: '#3A4152',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 12,
+    overflow: 'hidden',
   },
   label: { color: colors.text, fontSize: 15, fontWeight: '600' },
   selectRow: {

@@ -7,7 +7,7 @@ import { pingRelay } from '../lib/relay'
 import type { Settings } from '../lib/settings'
 import { addonBase } from '../lib/subtitles'
 import { LanguagePicker } from './LanguagePicker'
-import { Badge, Button, Card, colors, styles } from './ui'
+import { Badge, Button, Card, Chips, colors, styles } from './ui'
 
 type Props = {
   visible: boolean
@@ -82,12 +82,47 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
             </Pressable>
           </Card>
 
-          <Card title={t.size}>
+          <Card title={t.subtitleStyle}>
+            <View style={styles.preview}>
+              <Text
+                style={{
+                  color: settings.subtitleColor === 'yellow' ? '#FFD65C' : '#FFFFFF',
+                  backgroundColor: settings.subtitleBackground === 'box' ? 'rgba(0,0,0,0.7)' : 'transparent',
+                  fontSize: 12 + settings.fontScale * 6,
+                  fontWeight: '600',
+                  paddingHorizontal: 6,
+                  textAlign: 'center',
+                  textShadowColor: settings.subtitleBackground === 'box' ? 'transparent' : '#000000',
+                  textShadowRadius: 3,
+                }}
+              >
+                {t.preview}
+              </Text>
+            </View>
+            <Text style={styles.label}>{t.size}</Text>
             <View style={[styles.row, { justifyContent: 'space-between' }]}>
               <Button label="A−" onPress={() => onChange({ fontScale: Math.max(0.6, +(settings.fontScale - 0.1).toFixed(1)) })} />
-              <Text style={[styles.text, { fontSize: 14 + settings.fontScale * 6 }]}>{Math.round(settings.fontScale * 100)}%</Text>
+              <Text style={styles.text}>{Math.round(settings.fontScale * 100)}%</Text>
               <Button label="A+" onPress={() => onChange({ fontScale: Math.min(2.5, +(settings.fontScale + 0.1).toFixed(1)) })} />
             </View>
+            <Text style={styles.label}>{t.textColor}</Text>
+            <Chips
+              options={[
+                { value: 'white', label: t.white },
+                { value: 'yellow', label: t.yellow },
+              ]}
+              value={settings.subtitleColor}
+              onChange={(v) => onChange({ subtitleColor: v })}
+            />
+            <Text style={styles.label}>{t.background}</Text>
+            <Chips
+              options={[
+                { value: 'none', label: t.bgNone },
+                { value: 'box', label: t.bgBox },
+              ]}
+              value={settings.subtitleBackground}
+              onChange={(v) => onChange({ subtitleBackground: v })}
+            />
           </Card>
 
           <Card title={t.addons}>

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildMetadata } from '../src/lib/cast'
+import { buildLoadRequest, buildMetadata, sleepPlaybackDuration, textStyle } from '../src/lib/cast'
 import { APP_LANGUAGES, setAppLanguage, stringsFor, t } from '../src/lib/i18n'
 import { englishName, LANGUAGE_CHOICES, withEnglishFirst } from '../src/lib/languages'
 import { formatClock, formatRuntime, parseRuntime, toDetails } from '../src/lib/meta'
@@ -138,4 +138,44 @@ test('pickBestStream: prefers same quality, group and cached', () => {
   ]
   assert.equal(pickBestStream(streams, current)?.url, 'https://x/c')
   assert.equal(pickBestStream([], current), null)
+})
+
+import { shouldOfferResume } from '../src/lib/resume'
+
+test('resume: only offered between the first minute and the last 5%', () => {
+  assert.equal(shouldOfferResume(30, 3000), false)
+  assert.equal(shouldOfferResume(600, 3000), true)
+  assert.equal(shouldOfferResume(2900, 3000), false)
+  assert.equal(shouldOfferResume(600, 0), true) // unknown duration
+})
+
+test('sleep timer: TV-side playback limit in a one-item queue', () => {
+  const now = 1_000_000
+  assert.equal(sleepPlaybackDuration('off', null, now), undefined)
+  assert.equal(sleepPlaybackDuration('end', null, now), undefined)
+  assert.equal(sleepPlaybackDuration(30, now + 30 * 60000, now), 1800)
+  assert.equal(sleepPlaybackDuration(30, now - 1000, now), 5)
+
+  const stream = describeStream('https://x/The.Matrix.1999.mkv')
+  const look = { fontScale: 1, color: 'white' as const, background: 'none' as const }
+  const timed = buildLoadRequest({ stream, vttUrl: 'https://r/vtt', look, startTime: 120, playbackDuration: 1800 }) as any
+  assert.equal(timed.mediaInfo, undefined)
+  assert.equal(timed.queueData.items.length, 1)
+  assert.equal(timed.queueData.items[0].playbackDuration, 1800)
+  assert.equal(timed.queueData.items[0].startTime, 120)
+  assert.deepEqual(timed.queueData.items[0].activeTrackIds, [1])
+  assert.equal(timed.queueData.items[0].mediaInfo.contentUrl, stream.url)
+  const plain = buildLoadRequest({ stream, vttUrl: null, look }) as any
+  assert.equal(plain.queueData, undefined)
+  assert.equal(plain.mediaInfo.contentUrl, stream.url)
+})
+
+test('subtitle look', () => {
+  const y = textStyle({ fontScale: 1.5, color: 'yellow', background: 'box' }) as any
+  assert.equal(y.foregroundColor, '#FFD65CFF')
+  assert.equal(y.backgroundColor, '#000000B3')
+  assert.equal(y.fontScale, 1.5)
+  const w = textStyle({ fontScale: 1, color: 'white', background: 'none' }) as any
+  assert.equal(w.edgeType, 'outline')
+  assert.equal(w.backgroundColor, '#00000000')
 })
