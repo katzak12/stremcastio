@@ -54,7 +54,9 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
 - Sharing for free (2026-11-25): AltStore **Classic**/SideStore source, generated from the built app's Info.plist by
   `scripts/altstore-source.mjs` (AltStore refuses installs when version/permissions differ). Codemagic workflow
   `ios-release` runs on tags `v*`: builds the IPA and uploads `StremCastio.ipa` + `altstore-source.json` to that GitHub
-  release (needs GITHUB_TOKEN in Codemagic env group "github"). android.yml attaches the APK to the same release.
+  release (needs GITHUB_TOKEN in Codemagic env group "github"). android.yml attaches the APK to the same release
+  (via `gh release upload`; softprops/action-gh-release failed on v0.2.0, so that release had no APK). A missing APK can
+  be added later: run the Android workflow manually with input `release_tag` = the tag.
   Source URL: https://github.com/katzak12/stremcastio/releases/latest/download/altstore-source.json
   Release = bump `version`, `ios.buildNumber`, `android.versionCode` in app/app.json, then push tag v<version>.
   User guide: INSTALL.md (NL + EN). AltStore PAL is not an option without a paid Apple Developer account.
