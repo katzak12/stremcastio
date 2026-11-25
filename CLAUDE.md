@@ -26,8 +26,10 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   Apple ID login in Sideloadly failed (-22406, then "2FA requested second time", then -22405) after many attempts.
   Logging in on account.apple.com also failed. The password in 1Password may be outdated, or Apple rate-limited the account.
   Next step: Guus changes or verifies his Apple password via iPhone Settings, then tries Sideloadly once (Anisette: Auto).
-- Relay is **not deployed yet**. Needed: GitHub secrets `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers")
-  and `CLOUDFLARE_ACCOUNT_ID`. Push or re-run relay.yml, then set the repo variable `RELAY_URL` to the workers.dev URL and rebuild the app.
+- Relay is **deployed** (2026-11-25) at https://stremcastio-relay.stremcastio-relay.workers.dev (KV binding SUBS).
+  The URL is the default in `app/app.json` (`extra.relayUrl`); it can also be changed in the app's settings screen.
+  Redeploy: `cd worker && npx wrangler deploy` (needs CLOUDFLARE_API_TOKEN). For CI deploys, relay.yml still needs the
+  GitHub secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions

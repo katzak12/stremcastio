@@ -9,7 +9,7 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0E0F13",
     "extra": {
-      "relayUrl": ""
+      "relayUrl": "https://stremcastio-relay.stremcastio-relay.workers.dev"
     },
     "ios": {
       "bundleIdentifier": "app.stremcastio",
