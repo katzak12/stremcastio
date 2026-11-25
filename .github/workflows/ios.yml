@@ -1,10 +1,8 @@
 name: iOS IPA (unsigned, for AltStore / SideStore)
 
+# Manual only: GitHub's macOS runners never picked this job up, so iOS builds run on Codemagic
+# (codemagic.yaml: ios-unsigned on main, ios-release on v* tags). Kept for a manual try.
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-    paths: ['app/**', '.github/workflows/ios.yml']
   workflow_dispatch:
 
 permissions:
