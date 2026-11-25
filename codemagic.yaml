@@ -41,3 +41,76 @@ workflows:
           zip -qr StremCastio.ipa Payload
     artifacts:
       - app/StremCastio.ipa
+
+  # Release for friends: runs when a version tag (v0.2.0, …) is pushed. Builds the same unsigned IPA,
+  # then puts StremCastio.ipa and the AltStore/SideStore source on the GitHub release for that tag.
+  # Needs once, in Codemagic → this app → Environment variables: GITHUB_TOKEN (secure) in group "github",
+  # a fine-grained GitHub token for katzak12/stremcastio with "Contents: read and write".
+  ios-release:
+    name: iOS release (IPA + AltStore source on GitHub)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+      groups:
+        - github
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+    scripts:
+      - name: Install dependencies
+        script: cd app && npm ci
+      - name: Tests
+        script: cd app && npm test && cd .. && node --test scripts/altstore-source.test.mjs
+      - name: Generate native project
+        script: cd app && npx expo prebuild --platform ios
+      - name: Build (no code signing)
+        script: |
+          cd app
+          xcodebuild \
+            -workspace ios/StremCastio.xcworkspace \
+            -scheme StremCastio \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tail -40
+      - name: Package IPA and AltStore source
+        script: |
+          cd app
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/StremCastio.app Payload/
+          zip -qr StremCastio.ipa Payload
+          plutil -convert json -o info.json Payload/StremCastio.app/Info.plist
+          node ../scripts/altstore-source.mjs info.json StremCastio.ipa "$CM_TAG" altstore-source.json
+      - name: Upload to the GitHub release
+        script: |
+          set -euo pipefail
+          cd app
+          API="https://api.github.com/repos/katzak12/stremcastio"
+          AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json")
+          # The Android workflow may create the same release at the same moment; get it, or create it.
+          get_release() { curl -fsS "${AUTH[@]}" "$API/releases/tags/$CM_TAG" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }
+          ID=$(get_release 2>/dev/null || true)
+          if [ -z "$ID" ]; then
+            curl -sS "${AUTH[@]}" -X POST "$API/releases" \
+              -d "{\"tag_name\":\"$CM_TAG\",\"name\":\"StremCastio $CM_TAG\"}" >/dev/null || true
+            sleep 3
+            ID=$(get_release)
+          fi
+          for f in StremCastio.ipa altstore-source.json; do
+            # Replace an existing asset with the same name (re-runs).
+            OLD=$(curl -fsS "${AUTH[@]}" "$API/releases/$ID/assets" | python3 -c "import json,sys;print(next((a['id'] for a in json.load(sys.stdin) if a['name']=='$f'),''))")
+            [ -n "$OLD" ] && curl -fsS "${AUTH[@]}" -X DELETE "$API/releases/assets/$OLD"
+            curl -fsS "${AUTH[@]}" -H "Content-Type: application/octet-stream" --data-binary @"$f" \
+              "https://uploads.github.com/repos/katzak12/stremcastio/releases/$ID/assets?name=$f" >/dev/null
+            echo "Uploaded $f"
+          done
+    artifacts:
+      - app/StremCastio.ipa
+      - app/altstore-source.json

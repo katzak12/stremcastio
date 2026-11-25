@@ -47,6 +47,13 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   line/position/align settings are kept; ASS vector drawings ({\p1}) are skipped. Colours/fonts are dropped on purpose:
   the TV applies one readable look (default STANDARD_LOOK in cast.ts = Netflix-style white with black outline, fontScale 1, no box; "Use the standard style" button in Settings). Whether the Chromecast honours
   `line:0` is not yet verified on hardware.
+- Sharing for free (2026-11-25): AltStore **Classic**/SideStore source, generated from the built app's Info.plist by
+  `scripts/altstore-source.mjs` (AltStore refuses installs when version/permissions differ). Codemagic workflow
+  `ios-release` runs on tags `v*`: builds the IPA and uploads `StremCastio.ipa` + `altstore-source.json` to that GitHub
+  release (needs GITHUB_TOKEN in Codemagic env group "github"). android.yml attaches the APK to the same release.
+  Source URL: https://github.com/katzak12/stremcastio/releases/latest/download/altstore-source.json
+  Release = bump `version`, `ios.buildNumber`, `android.versionCode` in app/app.json, then push tag v<version>.
+  User guide: INSTALL.md (NL + EN). AltStore PAL is not an option without a paid Apple Developer account.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions
