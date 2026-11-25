@@ -23,6 +23,8 @@ export type Settings = {
   /** Stremio stream add-ons (e.g. Torrentio with debrid), for the next episode. */
   streamAddons: string[]
   autoNext: boolean
+  /** Last spoken language picked from a file's audio tracks (2-letter key); '' = what the file plays by default. */
+  audioLanguage: string
 }
 
 const KEY = 'stremcastio.settings.v1'
@@ -43,6 +45,7 @@ export function defaultSettings(): Settings {
     autoSearch: true,
     streamAddons: [],
     autoNext: true,
+    audioLanguage: '',
   }
 }
 
