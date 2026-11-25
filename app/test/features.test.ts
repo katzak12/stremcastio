@@ -179,3 +179,32 @@ test('subtitle look', () => {
   assert.equal(w.edgeType, 'outline')
   assert.equal(w.backgroundColor, '#00000000')
 })
+
+import { hasDolbyAudio, unsupportedAudio } from '../src/lib/streams'
+
+test('audio: DTS/TrueHD flagged, Dolby recognised', () => {
+  assert.equal(unsupportedAudio('Movie.2019.2160p.UHD.BluRay.REMUX.HDR.HEVC.DTS-HD.MA.7.1-GRP.mkv'), 'DTS')
+  assert.equal(unsupportedAudio('Movie 2019 1080p BluRay DTS x264'), 'DTS')
+  assert.equal(unsupportedAudio('Movie.2019.2160p.BluRay.REMUX.TrueHD.Atmos.7.1.mkv'), 'Dolby TrueHD')
+  assert.equal(unsupportedAudio('Movie.2019.1080p.WEB-DL.DDP5.1.Atmos.H.264.mkv'), null)
+  assert.equal(unsupportedAudio('Midsts.of.Time.2020.mkv'), null) // "dts" inside a word
+  assert.ok(hasDolbyAudio('Movie.2019.1080p.WEB-DL.DDP5.1.H.264'))
+  assert.ok(hasDolbyAudio('Movie 2019 1080p AC3 x264'))
+  assert.ok(hasDolbyAudio('Show S01E01 1080p WEB EAC3 5.1'))
+  assert.ok(!hasDolbyAudio('Movie 2019 1080p DTS'))
+})
+
+test('pickBestStream: Dolby alternative for a DTS remux', () => {
+  const current = 'Movie.2019.2160p.UHD.BluRay.REMUX.HDR.HEVC.DTS-HD.MA.7.1-GRP.mkv'
+  const streams = [
+    { name: '[RD+] Torrentio\n4k', title: 'Movie.2019.2160p.BluRay.REMUX.TrueHD.Atmos', url: 'https://x/truehd' },
+    { name: '[RD+] Torrentio\n4k', title: current, url: 'https://x/current' },
+    { name: '[RD+] Torrentio\n1080p', title: 'Movie.2019.1080p.WEB-DL.DDP5.1.H.264', url: 'https://x/1080' },
+    { name: '[RD+] Torrentio\n4k', title: 'Movie.2019.2160p.WEB-DL.DDP5.1.Atmos.HDR.HEVC', url: 'https://x/4kddp' },
+  ]
+  const opts = { requireSupportedAudio: true, excludeUrl: 'https://x/current' }
+  assert.equal(pickBestStream(streams, current, opts)?.url, 'https://x/4kddp')
+  assert.equal(pickBestStream(streams.slice(0, 2), current, opts), null)
+  // Without the requirement (next episode), DTS still loses to a playable version.
+  assert.equal(pickBestStream(streams, current)?.url, 'https://x/4kddp')
+})

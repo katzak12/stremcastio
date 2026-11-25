@@ -1,5 +1,6 @@
-// Finding the stream for the next episode, the way Stremio does: via a stream add-on (e.g. Torrentio with debrid).
-// Protocol: GET {base}/stream/series/{imdbId}:{season}:{episode}.json -> { streams: [{ url, name, title, behaviorHints }] }
+// Finding streams the way Stremio does: via a stream add-on (e.g. Torrentio with debrid). Used for the next
+// episode and for swapping a stream whose audio the Chromecast can't play for one with Dolby audio.
+// Protocol: GET {base}/stream/{movie|series}/{id}.json -> { streams: [{ url, name, title, behaviorHints }] }
 
 import { addonBase, getJson } from './subtitles'
 
@@ -26,6 +27,22 @@ export function addonFromStreamUrl(url: string): string | null {
   return m ? `${m[1]}/${m[2].toLowerCase()}=${m[3]}` : null
 }
 
+/**
+ * Audio the Chromecast can't decode or pass through (DTS family, Dolby TrueHD): usually no sound at all.
+ * Returns the codec name for the warning, or null.
+ */
+export function unsupportedAudio(text: string): string | null {
+  const t = text.toLowerCase().replace(/[._]/g, ' ')
+  if (/\btrue ?hd\b/.test(t)) return 'Dolby TrueHD'
+  if (/\bdts(?:[ -]?(?:hd|x|ma|es))?\b/.test(t)) return 'DTS'
+  return null
+}
+
+/** Dolby Digital / Dolby Digital Plus (incl. Atmos over DD+): plays in 5.1 through HDMI. */
+export function hasDolbyAudio(text: string): boolean {
+  return /\b(ddp?|dd\+|e?-?ac-?3|dolby digital)( ?\d[ .]?\d)?\b/i.test(text.replace(/[._]/g, ' '))
+}
+
 const TAGS = /\b(2160p|1080p|720p|480p|4k|hdr10\+?|hdr|dv|dovi|web[- ]?dl|webrip|bluray|remux|hdtv|x264|x265|h ?264|h ?265|hevc|av1|atmos|ddp?5 ?1|aac)\b/gi
 
 function tagsOf(text: string): Set<string> {
@@ -41,7 +58,11 @@ function groupOf(text: string): string | undefined {
  * Pick the stream most like the one we are watching: same quality/codec tags and release group,
  * preferring ones the debrid service already has cached ("[RD+]") so they start instantly.
  */
-export function pickBestStream(streams: AddonStream[], currentFilename: string): StreamCandidate | null {
+export function pickBestStream(
+  streams: AddonStream[],
+  currentFilename: string,
+  opts: { requireSupportedAudio?: boolean; excludeUrl?: string } = {},
+): StreamCandidate | null {
   const wantTags = tagsOf(currentFilename)
   const wantGroup = groupOf(currentFilename)
   let best: StreamCandidate | null = null
@@ -50,7 +71,12 @@ export function pickBestStream(streams: AddonStream[], currentFilename: string):
     if (!s.url || !/^https?:\/\//i.test(s.url)) return
     const text = [s.behaviorHints?.filename, s.title, s.description].filter(Boolean).join(' ')
     const name = s.name ?? ''
+    if (opts.excludeUrl && s.url === opts.excludeUrl) return
+    const audioBad = unsupportedAudio(`${text} ${name}`) != null
+    if (audioBad && opts.requireSupportedAudio) return
     let score = -i * 0.5 // add-on order is a decent default
+    if (audioBad) score -= 60 // likely silent on the TV
+    if (hasDolbyAudio(`${text} ${name}`)) score += 8
     for (const tag of tagsOf(text + ' ' + name)) if (wantTags.has(tag)) score += 10
     const group = groupOf(s.behaviorHints?.filename ?? (s.title ?? '').split('\n')[0])
     if (wantGroup && group === wantGroup) score += 25
@@ -69,6 +95,14 @@ export function pickBestStream(streams: AddonStream[], currentFilename: string):
   return best
 }
 
+async function fetchStreams(addons: string[], type: 'movie' | 'series', id: string): Promise<AddonStream[]> {
+  const bases = [...new Set(addons.map(addonBase).filter(Boolean))]
+  const results = await Promise.allSettled(
+    bases.map((b) => getJson<{ streams?: AddonStream[] }>(`${b}/stream/${type}/${encodeURIComponent(id)}.json`, 20000)),
+  )
+  return results.flatMap((r) => (r.status === 'fulfilled' ? (r.value.streams ?? []) : []))
+}
+
 export async function findEpisodeStream(opts: {
   addons: string[]
   imdbId: string
@@ -76,11 +110,18 @@ export async function findEpisodeStream(opts: {
   episode: number
   currentFilename: string
 }): Promise<StreamCandidate | null> {
-  const id = `${opts.imdbId}:${opts.season}:${opts.episode}`
-  const bases = [...new Set(opts.addons.map(addonBase).filter(Boolean))]
-  const results = await Promise.allSettled(
-    bases.map((b) => getJson<{ streams?: AddonStream[] }>(`${b}/stream/series/${encodeURIComponent(id)}.json`, 20000)),
-  )
-  const all = results.flatMap((r) => (r.status === 'fulfilled' ? (r.value.streams ?? []) : []))
+  const all = await fetchStreams(opts.addons, 'series', `${opts.imdbId}:${opts.season}:${opts.episode}`)
   return pickBestStream(all, opts.currentFilename)
+}
+
+/** Same movie/episode, as close as possible to the current one, but with audio the Chromecast can play. */
+export async function findPlayableAudioStream(opts: {
+  addons: string[]
+  type: 'movie' | 'series'
+  videoId: string
+  currentUrl: string
+  currentFilename: string
+}): Promise<StreamCandidate | null> {
+  const all = await fetchStreams(opts.addons, opts.type, opts.videoId)
+  return pickBestStream(all, opts.currentFilename, { requireSupportedAudio: true, excludeUrl: opts.currentUrl })
 }

@@ -81,6 +81,11 @@ const en = {
   preview: "This is how subtitles look",
   resetStyle: "Use the standard style",
   styleHint: "Standard: white sans-serif text with a black edge, bottom centre, no box. This is the style streaming services and film studios use: readable on any picture, while covering as little of it as possible.",
+  audioUnsupported: "The Chromecast can't play this audio ({codec}), so you would probably hear nothing.",
+  findDolby: "Find a version with Dolby audio",
+  searchingDolby: "Looking for a version with Dolby audio…",
+  dolbyNotFound: "No version with Dolby audio found. In Stremio, pick a stream with DD5.1 or DDP5.1 in its name.",
+  dolbyNeedsAddon: "Add your Torrentio link under Settings → Stream add-ons, so the app can look for another version.",
 }
 
 export type Strings = typeof en
@@ -165,6 +170,11 @@ const nl: Strings = {
   preview: "Zo zien ondertitels eruit",
   resetStyle: "Standaardstijl gebruiken",
   styleHint: "Standaard: witte schreefloze tekst met een zwarte rand, onderin het midden, zonder vlak. Deze stijl gebruiken streamingdiensten en filmstudio’s: leesbaar op elk beeld, terwijl er zo min mogelijk van het beeld wordt bedekt.",
+  audioUnsupported: "De Chromecast kan dit geluid ({codec}) niet afspelen, dus je hoort waarschijnlijk niets.",
+  findDolby: "Zoek versie met Dolby-geluid",
+  searchingDolby: "Versie met Dolby-geluid zoeken…",
+  dolbyNotFound: "Geen versie met Dolby-geluid gevonden. Kies in Stremio een stream met DD5.1 of DDP5.1 in de naam.",
+  dolbyNeedsAddon: "Voeg je Torrentio-link toe bij Instellingen → Stream-add-ons, dan kan de app een andere versie zoeken.",
 }
 
 const es: Strings = {
@@ -247,6 +257,11 @@ const es: Strings = {
   preview: "Así se ven los subtítulos",
   resetStyle: "Usar el estilo estándar",
   styleHint: "Estándar: texto blanco sin serifa con borde negro, abajo en el centro, sin caja. Es el estilo de los servicios de streaming y los estudios de cine: legible sobre cualquier imagen y tapando lo mínimo.",
+  audioUnsupported: "El Chromecast no puede reproducir este audio ({codec}), así que probablemente no oirás nada.",
+  findDolby: "Buscar versión con audio Dolby",
+  searchingDolby: "Buscando versión con audio Dolby…",
+  dolbyNotFound: "No se encontró versión con audio Dolby. En Stremio, elige un stream con DD5.1 o DDP5.1 en el nombre.",
+  dolbyNeedsAddon: "Añade tu enlace de Torrentio en Ajustes → Add-ons de streams para que la app pueda buscar otra versión.",
 }
 
 const pt: Strings = {
@@ -329,6 +344,11 @@ const pt: Strings = {
   preview: "Assim ficam as legendas",
   resetStyle: "Usar o estilo padrão",
   styleHint: "Padrão: texto branco sem serifa com borda preta, embaixo no centro, sem caixa. É o estilo usado por serviços de streaming e estúdios: legível em qualquer imagem, cobrindo o mínimo possível.",
+  audioUnsupported: "O Chromecast não reproduz este áudio ({codec}), então provavelmente você não ouvirá nada.",
+  findDolby: "Buscar versão com áudio Dolby",
+  searchingDolby: "Buscando versão com áudio Dolby…",
+  dolbyNotFound: "Nenhuma versão com áudio Dolby encontrada. No Stremio, escolha um stream com DD5.1 ou DDP5.1 no nome.",
+  dolbyNeedsAddon: "Adicione seu link do Torrentio em Ajustes → Add-ons de streams para o app procurar outra versão.",
 }
 
 const fr: Strings = {
@@ -411,6 +431,11 @@ const fr: Strings = {
   preview: "Aperçu des sous-titres",
   resetStyle: "Utiliser le style standard",
   styleHint: "Standard : texte blanc sans empattement avec contour noir, en bas au centre, sans encadré. C’est le style des plateformes de streaming et des studios : lisible sur toute image, en masquant le moins possible.",
+  audioUnsupported: "Le Chromecast ne peut pas lire ce son ({codec}), vous n’entendriez probablement rien.",
+  findDolby: "Trouver une version avec son Dolby",
+  searchingDolby: "Recherche d’une version avec son Dolby…",
+  dolbyNotFound: "Aucune version avec son Dolby trouvée. Dans Stremio, choisissez un stream avec DD5.1 ou DDP5.1 dans le nom.",
+  dolbyNeedsAddon: "Ajoutez votre lien Torrentio dans Réglages → Add-ons de streams pour que l’app cherche une autre version.",
 }
 
 const it: Strings = {
@@ -493,6 +518,11 @@ const it: Strings = {
   preview: "Ecco come appaiono i sottotitoli",
   resetStyle: "Usa lo stile standard",
   styleHint: "Standard: testo bianco senza grazie con bordo nero, in basso al centro, senza riquadro. È lo stile di servizi di streaming e studi cinematografici: leggibile su ogni immagine, coprendone il meno possibile.",
+  audioUnsupported: "Il Chromecast non può riprodurre questo audio ({codec}), quindi probabilmente non sentiresti nulla.",
+  findDolby: "Trova versione con audio Dolby",
+  searchingDolby: "Ricerca versione con audio Dolby…",
+  dolbyNotFound: "Nessuna versione con audio Dolby trovata. In Stremio scegli uno stream con DD5.1 o DDP5.1 nel nome.",
+  dolbyNeedsAddon: "Aggiungi il tuo link Torrentio in Impostazioni → Add-on di stream, così l’app può cercare un’altra versione.",
 }
 
 const tr: Strings = {
@@ -575,6 +605,11 @@ const tr: Strings = {
   preview: "Altyazılar böyle görünür",
   resetStyle: "Standart stili kullan",
   styleHint: "Standart: siyah kenarlı beyaz tırnaksız yazı, altta ortada, kutusuz. Yayın servisleri ve film stüdyolarının kullandığı stil: her görüntüde okunur, görüntüyü olabildiğince az kapatır.",
+  audioUnsupported: "Chromecast bu sesi ({codec}) oynatamaz, büyük ihtimalle hiçbir şey duymazsınız.",
+  findDolby: "Dolby sesli sürümü bul",
+  searchingDolby: "Dolby sesli sürüm aranıyor…",
+  dolbyNotFound: "Dolby sesli sürüm bulunamadı. Stremio’da adında DD5.1 veya DDP5.1 olan bir yayın seçin.",
+  dolbyNeedsAddon: "Uygulamanın başka sürüm araması için Torrentio bağlantınızı Ayarlar → Yayın eklentileri’ne ekleyin.",
 }
 
 const ru: Strings = {
@@ -657,6 +692,11 @@ const ru: Strings = {
   preview: "Так выглядят субтитры",
   resetStyle: "Стандартный стиль",
   styleHint: "Стандарт: белый шрифт без засечек с чёрной обводкой, внизу по центру, без подложки. Так делают стриминговые сервисы и киностудии: читается на любом фоне и почти не закрывает кадр.",
+  audioUnsupported: "Chromecast не воспроизводит этот звук ({codec}), скорее всего, звука не будет.",
+  findDolby: "Найти версию с Dolby",
+  searchingDolby: "Поиск версии со звуком Dolby…",
+  dolbyNotFound: "Версия со звуком Dolby не найдена. В Stremio выберите поток с DD5.1 или DDP5.1 в названии.",
+  dolbyNeedsAddon: "Добавьте ссылку Torrentio в Настройки → Аддоны потоков, чтобы приложение могло найти другую версию.",
 }
 
 const ja: Strings = {
@@ -739,6 +779,11 @@ const ja: Strings = {
   preview: "字幕の見え方",
   resetStyle: "標準スタイルを使う",
   styleHint: "標準: 黒い縁取りの白いゴシック体、下部中央、背景なし。配信サービスや映画スタジオが使うスタイルで、どんな映像でも読みやすく、画面をできるだけ隠しません。",
+  audioUnsupported: "Chromecast はこの音声（{codec}）を再生できないため、音が出ない可能性が高いです。",
+  findDolby: "Dolby 音声の版を探す",
+  searchingDolby: "Dolby 音声の版を検索中…",
+  dolbyNotFound: "Dolby 音声の版が見つかりません。Stremio で名前に DD5.1 または DDP5.1 があるストリームを選んでください。",
+  dolbyNeedsAddon: "別の版を探せるよう、設定 → ストリームアドオンに Torrentio のリンクを追加してください。",
 }
 
 const zh: Strings = {
@@ -821,6 +866,11 @@ const zh: Strings = {
   preview: "字幕效果预览",
   resetStyle: "使用标准样式",
   styleHint: "标准：白色无衬线字体加黑色描边，底部居中，无底框。这是流媒体平台和电影公司采用的样式：在任何画面上都清晰可读，同时尽量少遮挡画面。",
+  audioUnsupported: "Chromecast 无法播放此音轨（{codec}），很可能会没有声音。",
+  findDolby: "查找杜比音轨版本",
+  searchingDolby: "正在查找杜比音轨版本…",
+  dolbyNotFound: "未找到杜比音轨版本。请在 Stremio 中选择名称含 DD5.1 或 DDP5.1 的视频流。",
+  dolbyNeedsAddon: "请在 设置 → 视频流插件 中添加你的 Torrentio 链接，以便应用查找其他版本。",
 }
 
 const id: Strings = {
@@ -903,6 +953,11 @@ const id: Strings = {
   preview: "Begini tampilan subtitle",
   resetStyle: "Pakai gaya standar",
   styleHint: "Standar: teks putih sans-serif dengan tepi hitam, di tengah bawah, tanpa kotak. Gaya yang dipakai layanan streaming dan studio film: mudah dibaca di gambar apa pun, sambil menutupi gambar sesedikit mungkin.",
+  audioUnsupported: "Chromecast tidak bisa memutar audio ini ({codec}), jadi kemungkinan besar tidak ada suara.",
+  findDolby: "Cari versi dengan audio Dolby",
+  searchingDolby: "Mencari versi dengan audio Dolby…",
+  dolbyNotFound: "Versi dengan audio Dolby tidak ditemukan. Di Stremio, pilih stream dengan DD5.1 atau DDP5.1 di namanya.",
+  dolbyNeedsAddon: "Tambahkan tautan Torrentio di Pengaturan → Add-on stream agar aplikasi bisa mencari versi lain.",
 }
 
 const STRINGS: Record<string, Strings> = { en, nl, es, pt, fr, it, tr, ru, ja, zh, id }

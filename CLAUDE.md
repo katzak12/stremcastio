@@ -47,6 +47,10 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   line/position/align settings are kept; ASS vector drawings ({\p1}) are skipped. Colours/fonts are dropped on purpose:
   the TV applies one readable look (default STANDARD_LOOK in cast.ts = Netflix-style white with black outline, fontScale 1, no box; "Use the standard style" button in Settings). Whether the Chromecast honours
   `line:0` is not yet verified on hardware.
+- Audio: Chromecast can't play DTS/TrueHD (no sound). The app warns when the filename says DTS/TrueHD and offers
+  "Find a version with Dolby audio" (same movie/episode via the stream add-on, DD/DDP only, closest quality;
+  `findPlayableAudioStream` in streams.ts). The next-episode picker also avoids DTS/TrueHD. Transcoding was rejected:
+  not possible on iOS/Workers, and too costly/complex on a server.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions

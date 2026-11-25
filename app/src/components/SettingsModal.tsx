@@ -182,7 +182,7 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
             </View>
           </Card>
 
-          <Card title={t.nextEpisode}>
+          <Card title={t.streamAddons}>
             <View style={[styles.row, { justifyContent: 'space-between' }]}>
               <Text style={[styles.text, { flex: 1 }]}>{t.autoNext}</Text>
               <Switch
@@ -191,7 +191,6 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
                 trackColor={{ true: colors.accent, false: '#2C303C' }}
               />
             </View>
-            <Text style={[styles.label, { marginTop: 4 }]}>{t.streamAddons}</Text>
             <Text style={styles.muted}>{t.streamAddonHint}</Text>
             {settings.streamAddons.map((a) => (
               <View key={a} style={[styles.row, { justifyContent: 'space-between' }]}>
