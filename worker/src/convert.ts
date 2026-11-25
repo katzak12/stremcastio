@@ -95,6 +95,56 @@ interface Cue {
   start: number
   end: number
   text: string
+  /** WebVTT cue settings, e.g. "line:0" for text that belongs at the top of the picture. */
+  settings?: string
+}
+
+/** VTT setting for text placed at the top (signs, on-screen text, songs). */
+export const TOP = 'line:0'
+
+/**
+ * ASS/SSA override tags ({\i1}, {\an8}, …) also appear in many SRT files.
+ * Turn italic/bold/underline into <i>/<b>/<u>, detect top placement, and flag vector drawings
+ * ({\p1} … — shapes, not text) so they can be skipped. Everything else is dropped by cleanCueText.
+ */
+export function applyOverrides(text: string): { text: string; top: boolean; drawing: boolean } {
+  let top = false
+  let drawing = false
+  const open = { i: false, b: false, u: false }
+  let out = text.replace(/\{([^}]*)\}/g, (_m, block: string) => {
+    let html = ''
+    for (const tag of block.split('\\').slice(1)) {
+      const an = tag.match(/^an(\d)/)
+      if (an) top = ['7', '8', '9'].includes(an[1])
+      const legacy = tag.match(/^a(\d{1,2})$/)
+      if (legacy) top = ['5', '6', '7'].includes(legacy[1])
+      if (/^p[1-9]/.test(tag)) drawing = true
+      const fmt = tag.match(/^([ibu])(\d*)$/)
+      if (fmt) {
+        const k = fmt[1] as 'i' | 'b' | 'u'
+        const on = fmt[2] !== '' && fmt[2] !== '0'
+        if (on && !open[k]) html += `<${k}>`
+        if (!on && open[k]) html += `</${k}>`
+        open[k] = on
+      }
+    }
+    return html
+  })
+  for (const k of ['u', 'b', 'i'] as const) if (open[k]) out += `</${k}>`
+  return { text: out, top, drawing }
+}
+
+/** ASS "Alignment" is numpad-style (7-9 = top); legacy SSA uses 5-7 for top. */
+function isTopAlignment(value: string | undefined, legacy: boolean): boolean {
+  const n = Number(value)
+  return legacy ? n >= 5 && n <= 7 : n >= 7 && n <= 9
+}
+
+function overriddenCue(start: number, end: number, raw: string, styleTop = false): Cue | null {
+  const o = applyOverrides(raw)
+  if (o.drawing) return null
+  const text = cleanCueText(o.text)
+  return { start, end, text, settings: o.top || styleTop ? TOP : undefined }
 }
 
 function renderVtt(cues: Cue[], offsetMs: number): string {
@@ -103,7 +153,7 @@ function renderVtt(cues: Cue[], offsetMs: number): string {
     const start = c.start + offsetMs
     const end = c.end + offsetMs
     if (end <= 0 || end <= start || !c.text) continue
-    lines.push(`${formatVttTime(start)} --> ${formatVttTime(end)}`, c.text, '')
+    lines.push(`${formatVttTime(start)} --> ${formatVttTime(end)}${c.settings ? ` ${c.settings}` : ''}`, c.text, '')
   }
   return lines.join('\n')
 }
@@ -122,7 +172,8 @@ export function parseSrt(text: string): Cue[] {
     const start = parseTime(m[1])
     const end = parseTime(m[2])
     if (start === null || end === null) continue
-    cues.push({ start, end, text: cleanCueText(lines.slice(idx + 1).join('\n')) })
+    const cue = overriddenCue(start, end, lines.slice(idx + 1).join('\n'))
+    if (cue) cues.push(cue)
   }
   return cues
 }
@@ -130,14 +181,27 @@ export function parseSrt(text: string): Cue[] {
 export function parseAss(text: string): Cue[] {
   const cues: Cue[] = []
   let format: string[] | null = null
-  let inEvents = false
+  let styleFormat: string[] | null = null
+  let section = ''
+  let legacy = false
+  const topStyles = new Set<string>()
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     const line = raw.trim()
     if (/^\[.*\]$/.test(line)) {
-      inEvents = line.toLowerCase() === '[events]'
+      section = line.toLowerCase()
+      if (section === '[v4 styles]') legacy = true
       continue
     }
-    if (!inEvents) continue
+    if (section === '[v4+ styles]' || section === '[v4 styles]') {
+      if (line.toLowerCase().startsWith('format:')) styleFormat = line.slice(7).split(',').map((x) => x.trim().toLowerCase())
+      else if (line.toLowerCase().startsWith('style:') && styleFormat) {
+        const f = line.slice(6).split(',').map((x) => x.trim())
+        const name = f[styleFormat.indexOf('name')]
+        if (name && isTopAlignment(f[styleFormat.indexOf('alignment')], legacy)) topStyles.add(name.toLowerCase())
+      }
+      continue
+    }
+    if (section !== '[events]') continue
     if (line.toLowerCase().startsWith('format:')) {
       format = line.slice(7).split(',').map((s) => s.trim().toLowerCase())
       continue
@@ -157,7 +221,8 @@ export function parseAss(text: string): Cue[] {
     const start = parseTime(get('start') ?? '')
     const end = parseTime(get('end') ?? '')
     if (start === null || end === null) continue
-    cues.push({ start, end, text: cleanCueText(get('text') ?? '') })
+    const cue = overriddenCue(start, end, get('text') ?? '', topStyles.has((get('style') ?? '').trim().toLowerCase()))
+    if (cue) cues.push(cue)
   }
   return cues.sort((a, b) => a.start - b.start)
 }
@@ -175,7 +240,16 @@ export function parseVtt(text: string): Cue[] {
     const start = parseTime(m[1])
     const end = parseTime(m[2])
     if (start === null || end === null) continue
-    cues.push({ start, end, text: cleanCueText(lines.slice(idx + 1).join('\n')) })
+    // Keep only placement settings; the TV applies the look.
+    const settings = lines[idx]
+      .split('-->')[1]
+      ?.trim()
+      .split(/\s+/)
+      .slice(1)
+      .filter((x) => /^(line|position|align):[\w.%-]+$/.test(x))
+      .join(' ')
+    const cue = overriddenCue(start, end, lines.slice(idx + 1).join('\n'))
+    if (cue) cues.push({ ...cue, settings: [settings, cue.settings].filter(Boolean).join(' ') || undefined })
   }
   return cues
 }
