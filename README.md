@@ -39,7 +39,9 @@ Stremio ──link──▶ StremCastio (phone) ──"play this + this subtitle
 | Platform | How |
 |---|---|
 | Android | Download `StremCastio.apk` from [Releases](../../releases) and open it. |
-| iPhone / iPad | Download `StremCastio.ipa` from [Releases](../../releases) and install it with **AltStore** or **SideStore**, the same way you installed Stremio. |
+| iPhone / iPad | Add the source `https://github.com/katzak12/stremcastio/releases/latest/download/altstore-source.json` in **AltStore Classic** or **SideStore**, or install `StremCastio.ipa` from [Releases](../../releases) with **Sideloadly**. |
+
+Step-by-step instructions (Dutch and English): [INSTALL.md](INSTALL.md).
 
 ## Use it with Stremio
 

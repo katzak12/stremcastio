@@ -22,7 +22,7 @@ import { useIncoming, type Incoming } from './lib/incoming'
 import { langName } from './lib/languages'
 import { fetchDetails, formatClock, formatRuntime, type MediaDetails } from './lib/meta'
 import { isRemote, relayVttUrl, uploadLocalSubtitle } from './lib/relay'
-import { addonFromStreamUrl, findEpisodeStream } from './lib/streams'
+import { addonFromStreamUrl, findEpisodeStream, findPlayableAudioStream, unsupportedAudio } from './lib/streams'
 import { clearResume, getResume, saveResume } from './lib/resume'
 import { getSyncOffset, saveSyncOffset, syncKey } from './lib/syncMemory'
 import { useSettings } from './lib/settings'
@@ -77,6 +77,7 @@ function Main() {
   const [offsetSaved, setOffsetSaved] = useState(false)
   const [nextUp, setNextUp] = useState<NextUp>({ status: 'idle' })
   const preparedFor = useRef<string | null>(null)
+  const [altSearch, setAltSearch] = useState<'idle' | 'searching' | 'notfound' | 'noaddon'>('idle')
   const [sleep, setSleep] = useState<SleepMode>('off')
   const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null)
 
@@ -112,9 +113,11 @@ function Main() {
 
   // ---------- incoming streams ----------
 
-  const acceptStream = useCallback((url: string, subs: SubtitleOption[] = [], title?: string) => {
-    const info = describeStream(url)
+  const acceptStream = useCallback((url: string, subs: SubtitleOption[] = [], title?: string, keep?: Partial<StreamInfo>) => {
+    const described = describeStream(url)
+    const info = keep ? { ...described, ...keep } : described
     setStream(title && !info.season ? { ...info, title } : info)
+    setAltSearch('idle')
     setIncomingSubs(subs)
     setFound([])
     setSearch({ status: 'idle' })
@@ -317,6 +320,41 @@ function Main() {
     }, 1200)
   }
 
+  // ---------- audio the Chromecast can't play (DTS / TrueHD) ----------
+
+  const badAudio = stream ? unsupportedAudio(stream.filename) : null
+
+  const findDolbyVersion = async () => {
+    if (!stream || !settings) return
+    const addons = [...settings.streamAddons, addonFromStreamUrl(stream.url)].filter((a): a is string => !!a)
+    if (addons.length === 0) return setAltSearch('noaddon')
+    setAltSearch('searching')
+    try {
+      const imdb = imdbId ?? (await imdbLookup)?.id
+      if (!imdb) return setAltSearch('notfound')
+      const { type, id } = stremioVideoId(imdb, stream)
+      const candidate = await findPlayableAudioStream({
+        addons,
+        type,
+        videoId: id,
+        currentUrl: stream.url,
+        currentFilename: stream.filename,
+      })
+      if (!candidate) return setAltSearch('notfound')
+      const described = describeStream(candidate.url)
+      // Same title/episode; keep what we already know so artwork and subtitles stay right.
+      acceptStream(candidate.url, [], undefined, {
+        filename: candidate.filename ?? described.filename,
+        title: stream.title,
+        year: stream.year,
+        season: stream.season,
+        episode: stream.episode,
+      })
+    } catch {
+      setAltSearch('notfound')
+    }
+  }
+
   // ---------- next episode ----------
 
   // Once an episode plays, find the next one's stream + subtitle and put it in the TV's queue,
@@ -503,7 +541,24 @@ function Main() {
         {/* ---------- video ---------- */}
         <Card title={t.videoTitle}>
           {stream ? (
-            <VideoInfo stream={stream} details={details} />
+            <View style={{ gap: 10 }}>
+              <VideoInfo stream={stream} details={details} />
+              {badAudio && (
+                <View style={[styles.selectRow, { gap: 8, borderColor: colors.warn }]}>
+                  <Text style={{ color: colors.warn }}>{t.audioUnsupported.replace('{codec}', badAudio)}</Text>
+                  {altSearch === 'searching' ? (
+                    <View style={styles.row}>
+                      <ActivityIndicator color={colors.accent} size="small" />
+                      <Text style={styles.muted}>{t.searchingDolby}</Text>
+                    </View>
+                  ) : (
+                    <Button label={t.findDolby} kind="primary" small onPress={findDolbyVersion} />
+                  )}
+                  {altSearch === 'notfound' && <Text style={styles.muted}>{t.dolbyNotFound}</Text>}
+                  {altSearch === 'noaddon' && <Text style={styles.muted}>{t.dolbyNeedsAddon}</Text>}
+                </View>
+              )}
+            </View>
           ) : (
             <Text style={styles.muted}>{t.noVideo}</Text>
           )}
