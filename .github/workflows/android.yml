@@ -8,6 +8,11 @@ on:
   pull_request:
     paths: ['app/**']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional: attach the APK to this tag''s release (e.g. v0.2.1). A missing tag/release is created from main.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -17,11 +22,33 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      # Tag whose release gets the APK: the pushed v* tag, or the tag given to a manual run.
+      RELEASE_TAG: ${{ inputs.release_tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
     defaults:
       run:
         working-directory: app
     steps:
+      # Manual run with a tag that does not exist yet: build main and create the release + tag from it.
+      - name: Pick the source to build
+        id: src
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "$RELEASE_TAG" ]; then
+            if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+              echo "ref=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+            else
+              echo "ref=main" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "ref=$GITHUB_REF" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.src.outputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -77,8 +104,23 @@ jobs:
           name: StremCastio-android
           path: StremCastio.apk
 
+      # gh CLI instead of softprops/action-gh-release: that action failed on v0.2.0 with
+      # "Unexpected error fetching GitHub release" when the release already existed
+      # (created in the browser / by Codemagic), so the APK never got attached.
       - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: StremCastio.apk
+        if: env.RELEASE_TAG != ''
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            # Creates the tag on the commit we just built if it does not exist yet. Codemagic may create
+            # the same release at the same moment; ignore an "already exists" error.
+            gh release create "$RELEASE_TAG" --target "$(git rev-parse HEAD)" --title "StremCastio ${RELEASE_TAG#v}" --notes "" || true
+          fi
+          for i in 1 2 3 4; do
+            gh release upload "$RELEASE_TAG" StremCastio.apk --clobber && exit 0
+            echo "Upload failed (attempt $i), retrying…"; sleep $((i * 10))
+          done
+          exit 1

@@ -17,11 +17,12 @@ import GoogleCast, {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { SettingsModal } from './components/SettingsModal'
 import { Badge, Button, Card, Chips, colors, styles } from './components/ui'
+import { audioTrackLabel, chooseAudioTrack, fetchAudioTracks, type FileAudioTrack } from './lib/audioTracks'
 import { activateSubtitles, buildLoadRequest, sleepPlaybackDuration, STANDARD_LOOK, SUBTITLE_TRACK_ID, textStyle, type SleepMode, type SubtitleLook } from './lib/cast'
 import { getRememberedDevice, loadWithRetry, pingTv, rememberDevice } from './lib/castConnect'
 import { setAppLanguage, t } from './lib/i18n'
 import { useIncoming, type Incoming } from './lib/incoming'
-import { langName } from './lib/languages'
+import { langName, normalizeLang } from './lib/languages'
 import { fetchDetails, formatClock, formatRuntime, type MediaDetails } from './lib/meta'
 import { isRemote, relayVttUrl, uploadLocalSubtitle } from './lib/relay'
 import { addonFromStreamUrl, findEpisodeStream, findPlayableAudioStream, unsupportedAudio } from './lib/streams'
@@ -91,7 +92,17 @@ function Main() {
   const device = useCastDevice()
   const mediaStatus = useMediaStatus()
   const connected = castState === CastState.CONNECTED && client != null
-  const isPlayingOurs = !!mediaStatus?.mediaInfo && mediaStatus.mediaInfo.contentUrl === stream?.url
+
+  // Audio tracks inside the file (MKV), read via the relay. The chosen track decides what we cast.
+  const [fileAudio, setFileAudio] = useState<{ url: string; loading: boolean; tracks: FileAudioTrack[] }>({ url: '', loading: false, tracks: [] })
+  const [audioPick, setAudioPick] = useState<number | null>(null)
+  const audioTracksForStream = stream && fileAudio.url === stream.url ? fileAudio.tracks : []
+  const chosenAudio =
+    audioTracksForStream.find((tr) => tr.number === audioPick) ?? chooseAudioTrack(audioTracksForStream, settings?.audioLanguage)
+  const castUrl = chosenAudio?.url ?? stream?.url
+  const tvContentUrl = mediaStatus?.mediaInfo?.contentUrl
+  const isPlayingOurs =
+    !!tvContentUrl && !!stream && (tvContentUrl === stream.url || audioTracksForStream.some((tr) => tr.url === tvContentUrl))
   const position = useStreamPosition(1)
 
   // One IMDb lookup per stream, shared by the subtitle search and the artwork/rating.
@@ -131,8 +142,22 @@ function Main() {
     setCastError(null)
     setLinkInput('')
     setNextUp({ status: 'idle' })
+    setAudioPick(null)
     preparedFor.current = null
   }, [])
+
+  useEffect(() => {
+    if (!stream || !settings?.relayUrl || !isRemote(stream.url)) return
+    const url = stream.url
+    let cancelled = false
+    setFileAudio({ url, loading: true, tracks: [] })
+    fetchAudioTracks(settings.relayUrl, url).then((tracks) => {
+      if (!cancelled) setFileAudio({ url, loading: false, tracks })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [stream, settings?.relayUrl])
 
   useIncoming(
     useCallback((inc: Incoming) => acceptStream(inc.streamUrl, inc.subtitles, inc.title), [acceptStream]),
@@ -232,7 +257,7 @@ function Main() {
       try {
         const vttUrl = await resolveVtt(selected, offset)
         const request = buildLoadRequest({
-          stream,
+          stream: castUrl && castUrl !== stream.url ? { ...stream, url: castUrl } : stream,
           vttUrl,
           subtitleLang: selected?.lang,
           subtitleName: selected ? langName(selected.lang) : undefined,
@@ -260,7 +285,7 @@ function Main() {
         setBusy(false)
       }
     },
-    [client, stream, settings, selected, offsetMs, resolveVtt, details, sleep, sleepEndsAt],
+    [client, stream, castUrl, settings, selected, offsetMs, resolveVtt, details, sleep, sleepEndsAt],
   )
 
   // ---------- continue watching ----------
@@ -412,7 +437,32 @@ function Main() {
 
   // ---------- audio the Chromecast can't play (DTS / TrueHD) ----------
 
-  const badAudio = stream ? unsupportedAudio(stream.filename) : null
+  // Known tracks: only warn when the track we'd cast is silent on the TV. Otherwise guess from the file name.
+  const badAudio = !stream
+    ? null
+    : audioTracksForStream.length
+      ? chosenAudio && !chosenAudio.playable
+        ? (chosenAudio.codec.match(/TRUEHD|DTS/i)?.[0] ?? chosenAudio.codec)
+        : null
+      : unsupportedAudio(stream.filename)
+
+  // Picking another audio track while it plays: cast again at the same position.
+  const reloadForAudio = useRef(false)
+  const pickAudio = (num: number) => {
+    const track = audioTracksForStream.find((tr) => tr.number === num)
+    if (!track || track.number === chosenAudio?.number) return
+    setAudioPick(num)
+    update({ audioLanguage: normalizeLang(track.language) })
+    reloadForAudio.current = isPlayingOurs
+  }
+  useEffect(() => {
+    if (!reloadForAudio.current || !client) return
+    reloadForAudio.current = false
+    client
+      .getStreamPosition()
+      .then((pos) => loadOnTv(pos ?? 0))
+      .catch(() => {})
+  }, [castUrl, client, loadOnTv])
 
   const findDolbyVersion = async () => {
     if (!stream || !settings) return
@@ -633,6 +683,19 @@ function Main() {
           {stream ? (
             <View style={{ gap: 10 }}>
               <VideoInfo stream={stream} details={details} />
+              {audioTracksForStream.length > 1 && chosenAudio && (
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.muted}>{t.audio}</Text>
+                  <Chips
+                    options={audioTracksForStream.map((tr) => ({
+                      value: tr.number,
+                      label: `${audioTrackLabel(tr)}${tr.playable ? '' : ` · ${t.audioNoSound}`}`,
+                    }))}
+                    value={chosenAudio.number}
+                    onChange={pickAudio}
+                  />
+                </View>
+              )}
               {badAudio && (
                 <View style={[styles.selectRow, { gap: 8, borderColor: colors.warn }]}>
                   <Text style={{ color: colors.warn }}>{t.audioUnsupported.replace('{codec}', badAudio)}</Text>

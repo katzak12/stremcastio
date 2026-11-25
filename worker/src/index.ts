@@ -7,10 +7,27 @@
 //   GET  /vtt?src=<url>[&offset=<ms>]   fetch + convert a subtitle URL
 //   POST /upload[?offset=<ms>]          upload subtitle text (local files)
 //   GET  /s/<id>.vtt                    serve an uploaded subtitle
+//   GET  /tracks?u=<video url>           audio/subtitle tracks inside an MKV, with a cast URL per audio track
+//   GET  /media?u=<video url>&p=<patches> the video, with a few header bytes changed so the Chromecast
+//                                        plays the chosen audio track (see mkv.ts); the rest streams through
 //
-// Free tier is plenty: one request per film for the subtitle file.
+// Free tier is plenty: one request per film for the subtitle file. /media only touches the first bytes;
+// everything after them is piped straight from the source without the Worker reading it.
 
 import { decodeBytes, isGzip, toVtt } from './convert.ts'
+import {
+  decodePatches,
+  defaultAudio,
+  encodePatches,
+  isPlayableAudioCodec,
+  parseHead,
+  parseTracksElement,
+  patchesFor,
+  TRACK_TYPE_AUDIO,
+  TRACK_TYPE_SUBTITLE,
+  type MkvTrack,
+  type Patch,
+} from './mkv.ts'
 
 export interface Env {
   /** Optional KV namespace for /upload. Without it, /upload returns 501. */
@@ -23,7 +40,8 @@ const UPLOAD_TTL_SECONDS = 60 * 60 * 24 * 2
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Range',
+  'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
   'Access-Control-Max-Age': '86400',
 }
 
@@ -122,16 +140,193 @@ async function handleStored(path: string, env: Env): Promise<Response> {
   return vtt ? vttResponse(vtt, 3600) : json({ error: 'Not found or expired' }, 404)
 }
 
+// ---------- audio track choice for MKV ----------
+
+const HEAD_BYTES = 1024 * 1024
+const TRACKS_BYTES = 512 * 1024
+const UA = { 'User-Agent': 'StremCastio/1.0' }
+
+function httpUrl(raw: string | null): URL | null {
+  if (!raw) return null
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u : null
+  } catch {
+    return null
+  }
+}
+
+/** Reads bytes [start, start+length) of a remote file; stops early if the server ignores Range. */
+async function fetchBytes(src: string, start: number, length: number): Promise<Uint8Array> {
+  const res = await fetch(src, { headers: { ...UA, Range: `bytes=${start}-${start + length - 1}` }, redirect: 'follow' })
+  if (!res.ok || !res.body) throw new Error(`Video source returned ${res.status}`)
+  if (res.status === 200 && start > 0) {
+    await res.body.cancel()
+    throw new Error('Video source does not support byte ranges')
+  }
+  const reader = res.body.getReader()
+  const out = new Uint8Array(length)
+  let pos = 0
+  while (pos < length) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const n = Math.min(value.byteLength, length - pos)
+    out.set(value.subarray(0, n), pos)
+    pos += n
+  }
+  await reader.cancel().catch(() => {})
+  return out.subarray(0, pos)
+}
+
+export async function readTracks(src: string): Promise<MkvTrack[] | null> {
+  const head = await fetchBytes(src, 0, HEAD_BYTES)
+  const result = parseHead(head)
+  if (result.kind === 'tracks') return result.tracks
+  if (result.kind === 'seek') {
+    return parseTracksElement(await fetchBytes(src, result.tracksOffset, TRACKS_BYTES), result.tracksOffset)
+  }
+  return null
+}
+
+async function handleTracks(url: URL): Promise<Response> {
+  const src = httpUrl(url.searchParams.get('u'))
+  if (!src) return json({ error: 'Missing or invalid ?u=' }, 400)
+  const tracks = await readTracks(src.toString())
+  if (!tracks) return json({ container: 'other', audio: [], subtitles: [] }, 200)
+  const tvDefault = defaultAudio(tracks)
+  const audio = tracks
+    .filter((t) => t.type === TRACK_TYPE_AUDIO)
+    .map((t) => {
+      const patches = patchesFor(tracks, t.number)
+      const params = new URLSearchParams({ u: src.toString(), p: encodePatches(patches) })
+      return {
+        number: t.number,
+        language: t.language,
+        name: t.name,
+        codec: t.codec,
+        channels: t.channels,
+        isDefault: t === tvDefault,
+        playable: isPlayableAudioCodec(t.codec),
+        url: patches.length ? `${url.origin}/media?${params}` : src.toString(),
+      }
+    })
+  const subtitles = tracks
+    .filter((t) => t.type === TRACK_TYPE_SUBTITLE)
+    .map((t) => ({ number: t.number, language: t.language, name: t.name, codec: t.codec }))
+  return json({ container: 'mkv', audio, subtitles })
+}
+
+const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag']
+
+function mediaHeaders(from: Headers): Headers {
+  const h = new Headers(CORS)
+  for (const k of PASS_HEADERS) {
+    const v = from.get(k)
+    if (v) h.set(k, v)
+  }
+  if (!h.get('content-type') || h.get('content-type') === 'application/octet-stream') h.set('content-type', 'video/x-matroska')
+  h.set('accept-ranges', 'bytes')
+  return h
+}
+
+function isPage(res: Response): boolean {
+  return /text\/html|application\/json/i.test(res.headers.get('content-type') ?? '')
+}
+
+function parseRange(header: string | null): { start: number; end: number | null } | null {
+  if (!header) return null
+  const m = /^bytes=(\d+)-(\d*)$/.exec(header.trim())
+  if (!m) return null
+  return { start: Number(m[1]), end: m[2] ? Number(m[2]) : null }
+}
+
+function totalFrom(res: Response): number | null {
+  const m = /\/(\d+)\s*$/.exec(res.headers.get('content-range') ?? '')
+  return m ? Number(m[1]) : null
+}
+
+async function handleMedia(req: Request, url: URL, ctx?: ExecutionContext): Promise<Response> {
+  const src = httpUrl(url.searchParams.get('u'))
+  const patches = decodePatches(url.searchParams.get('p'))
+  if (!src || !patches) return json({ error: 'Missing or invalid ?u= or ?p=' }, 400)
+
+  const range = parseRange(req.headers.get('range'))
+  const start = range?.start ?? 0
+  const end = range?.end ?? null
+  const inRange = patches.filter((p) => p.offset >= start && (end === null || p.offset <= end))
+
+  // Nothing to change in the requested bytes (or a HEAD request): stream straight from the source.
+  if (req.method === 'HEAD' || inRange.length === 0) {
+    const headers: Record<string, string> = { ...UA }
+    const rangeHeader = req.headers.get('range')
+    if (rangeHeader) headers.Range = rangeHeader
+    const up = await fetch(src.toString(), { method: req.method, headers, redirect: 'follow' })
+    if (isPage(up)) return json({ error: 'Source is not a video' }, 502)
+    return new Response(up.body, { status: up.status, headers: mediaHeaders(up.headers) })
+  }
+
+  // The requested bytes include the header bytes we change: read up to the last one, patch, then pipe the rest.
+  const headEnd = inRange[inRange.length - 1].offset
+  const headRes = await fetch(src.toString(), { headers: { ...UA, Range: `bytes=${start}-${headEnd}` }, redirect: 'follow' })
+  if (headRes.status !== 206 || isPage(headRes)) {
+    await headRes.body?.cancel()
+    return json({ error: `Video source returned ${headRes.status} for a byte range` }, 502)
+  }
+  const total = totalFrom(headRes)
+  const head = new Uint8Array(await headRes.arrayBuffer())
+  applyPatches(head, start, inRange)
+
+  const lastByte = end ?? (total !== null ? total - 1 : null)
+  if (lastByte === null) return json({ error: 'Video source did not report its size' }, 502)
+  const length = lastByte - start + 1
+  const headers = mediaHeaders(headRes.headers)
+  headers.set('content-length', String(length))
+  if (range) headers.set('content-range', `bytes ${start}-${lastByte}/${total ?? '*'}`)
+  else headers.delete('content-range')
+  const status = range ? 206 : 200
+
+  if (headEnd >= lastByte) return new Response(head.subarray(0, length), { status, headers })
+
+  const rest = await fetch(src.toString(), {
+    headers: { ...UA, Range: `bytes=${headEnd + 1}-${end ?? ''}` },
+    redirect: 'follow',
+  })
+  if (rest.status !== 206 || !rest.body) {
+    await rest.body?.cancel()
+    return json({ error: `Video source returned ${rest.status} for a byte range` }, 502)
+  }
+  // FixedLengthStream (Workers) keeps Content-Length; piping between native streams costs no Worker CPU.
+  const FLS = (globalThis as { FixedLengthStream?: new (n: number) => TransformStream<Uint8Array, Uint8Array> }).FixedLengthStream
+  const { readable, writable } = FLS ? new FLS(length) : new TransformStream<Uint8Array, Uint8Array>()
+  const pump = (async () => {
+    const writer = writable.getWriter()
+    await writer.write(head)
+    writer.releaseLock()
+    await rest.body!.pipeTo(writable)
+  })().catch(() => {})
+  ctx?.waitUntil(pump)
+  return new Response(readable, { status, headers })
+}
+
+export function applyPatches(bytes: Uint8Array, base: number, patches: Patch[]): void {
+  for (const p of patches) {
+    const i = p.offset - base
+    if (i >= 0 && i < bytes.length) bytes[i] = p.value
+  }
+}
+
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(req.url)
     try {
       if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
       if (url.pathname === '/vtt' && (req.method === 'GET' || req.method === 'HEAD')) return await handleVtt(url)
       if (url.pathname === '/upload' && req.method === 'POST') return await handleUpload(req, url, env)
       if (url.pathname.startsWith('/s/') && req.method === 'GET') return await handleStored(url.pathname, env)
+      if (url.pathname === '/tracks' && req.method === 'GET') return await handleTracks(url)
+      if (url.pathname === '/media' && (req.method === 'GET' || req.method === 'HEAD')) return await handleMedia(req, url, ctx)
       if (url.pathname === '/' || url.pathname === '/health') {
-        return json({ name: 'stremcastio-relay', ok: true, uploads: Boolean(env.SUBS) })
+        return json({ name: 'stremcastio-relay', ok: true, uploads: Boolean(env.SUBS), audioTracks: true })
       }
       return json({ error: 'Not found' }, 404)
     } catch (err) {

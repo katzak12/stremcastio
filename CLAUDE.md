@@ -54,7 +54,9 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
 - Sharing for free (2026-11-25): AltStore **Classic**/SideStore source, generated from the built app's Info.plist by
   `scripts/altstore-source.mjs` (AltStore refuses installs when version/permissions differ). Codemagic workflow
   `ios-release` runs on tags `v*`: builds the IPA and uploads `StremCastio.ipa` + `altstore-source.json` to that GitHub
-  release (needs GITHUB_TOKEN in Codemagic env group "github"). android.yml attaches the APK to the same release.
+  release (needs GITHUB_TOKEN in Codemagic env group "github"). android.yml attaches the APK to the same release
+  (via `gh release upload`; softprops/action-gh-release failed on v0.2.0, so that release had no APK). A missing APK can
+  be added later: run the Android workflow manually with input `release_tag` = the tag.
   Source URL: https://github.com/katzak12/stremcastio/releases/latest/download/altstore-source.json
   Release = bump `version`, `ios.buildNumber`, `android.versionCode` in app/app.json, then push tag v<version>.
   User guide: INSTALL.md (NL + EN). AltStore PAL is not an option without a paid Apple Developer account.
@@ -66,6 +68,16 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   "Cast to TV" connects straight to it, waits while CONNECTING, and loadMedia retries (with a timeout) while the
   receiver starts. When already "connected" (button shows the TV name) the app pings the TV first (requestStatus, 3 s);
   a hang or a failed load drops the dead session and reconnects to the same TV once, then casts (reconnectAndCast).
+- 0.2.2 audio-track choice (VLC-style, from Guus's test): the relay's `GET /tracks?u=` reads the MKV header (EBML,
+  first 1 MB, follows the SeekHead if Tracks lies further) and returns the audio tracks with a cast URL each.
+  The Chromecast can't switch tracks in a plain MKV, so `GET /media?u=&p=` proxies the file and changes single
+  header bytes: other audio tracks get TrackType 0x20 (players skip unknown types), the chosen one FlagDefault=1.
+  Only the requested range containing those bytes is read by the Worker; the rest is piped natively (FixedLengthStream).
+  App (`audioTracks.ts`): picker in the Video card when a file has >1 audio track; default = last picked language
+  (`settings.audioLanguage`), never TrueHD/DTS when a playable track exists, no commentary; changing it while playing
+  re-casts at the same position. MP4 files are not handled (no picker). Needs the relay redeployed.
+  **Not verified on hardware**: whether the Chromecast honours the patched header, and whether debrid hosts
+  accept requests from Cloudflare (they may block datacenter IPs). The queued next episode still uses the default track.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions
