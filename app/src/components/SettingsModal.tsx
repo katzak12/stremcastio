@@ -3,11 +3,12 @@ import { Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View }
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { APP_LANGUAGES, t } from '../lib/i18n'
 import { englishName, LANGUAGE_CHOICES, langName } from '../lib/languages'
-import { STANDARD_LOOK } from '../lib/cast'
+import { STANDARD_LOOK, type SubtitleBackground, type SubtitleColor, type SubtitleEdge, type SubtitleFont } from '../lib/cast'
 import { pingRelay } from '../lib/relay'
-import type { Settings } from '../lib/settings'
+import { lookFromSettings, lookToSettings, type Settings } from '../lib/settings'
 import { addonBase } from '../lib/subtitles'
 import { LanguagePicker } from './LanguagePicker'
+import { SubtitlePreview } from './SubtitlePreview'
 import { Badge, Button, Card, Chips, colors, styles } from './ui'
 
 type Props = {
@@ -84,22 +85,7 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
           </Card>
 
           <Card title={t.subtitleStyle}>
-            <View style={styles.preview}>
-              <Text
-                style={{
-                  color: settings.subtitleColor === 'yellow' ? '#FFD65C' : '#FFFFFF',
-                  backgroundColor: settings.subtitleBackground === 'box' ? 'rgba(0,0,0,0.7)' : 'transparent',
-                  fontSize: 12 + settings.fontScale * 6,
-                  fontWeight: '600',
-                  paddingHorizontal: 6,
-                  textAlign: 'center',
-                  textShadowColor: settings.subtitleBackground === 'box' ? 'transparent' : '#000000',
-                  textShadowRadius: 3,
-                }}
-              >
-                {t.preview}
-              </Text>
-            </View>
+            <SubtitlePreview look={lookFromSettings(settings)} />
             <Text style={styles.label}>{t.size}</Text>
             <View style={[styles.row, { justifyContent: 'space-between' }]}>
               <Button label="A−" onPress={() => onChange({ fontScale: Math.max(0.6, +(settings.fontScale - 0.1).toFixed(1)) })} />
@@ -107,40 +93,57 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
               <Button label="A+" onPress={() => onChange({ fontScale: Math.min(2.5, +(settings.fontScale + 0.1).toFixed(1)) })} />
             </View>
             <Text style={styles.label}>{t.textColor}</Text>
-            <Chips
+            <Chips<SubtitleColor>
               options={[
                 { value: 'white', label: t.white },
                 { value: 'yellow', label: t.yellow },
+                { value: 'cyan', label: t.cyan },
+                { value: 'green', label: t.green },
               ]}
               value={settings.subtitleColor}
               onChange={(v) => onChange({ subtitleColor: v })}
             />
+            <Text style={styles.label}>{t.textEdge}</Text>
+            <Chips<SubtitleEdge>
+              options={[
+                { value: 'outline', label: t.edgeOutline },
+                { value: 'dropShadow', label: t.edgeShadow },
+                { value: 'raised', label: t.edgeRaised },
+                { value: 'depressed', label: t.edgeDepressed },
+                { value: 'none', label: t.bgNone },
+              ]}
+              value={settings.subtitleEdge}
+              onChange={(v) => onChange({ subtitleEdge: v })}
+            />
             <Text style={styles.label}>{t.background}</Text>
-            <Chips
+            <Chips<SubtitleBackground>
               options={[
                 { value: 'none', label: t.bgNone },
-                { value: 'box', label: t.bgBox },
+                { value: 'semi', label: t.bgSemi },
+                { value: 'solid', label: t.bgSolid },
               ]}
               value={settings.subtitleBackground}
               onChange={(v) => onChange({ subtitleBackground: v })}
+            />
+            <Text style={styles.label}>{t.font}</Text>
+            <Chips<SubtitleFont>
+              options={[
+                { value: 'sansSerif', label: t.fontSans },
+                { value: 'serif', label: t.fontSerif },
+                { value: 'monoSansSerif', label: t.fontMono },
+                { value: 'casual', label: t.fontCasual },
+                { value: 'smallCaps', label: t.fontSmallCaps },
+              ]}
+              value={settings.subtitleFont}
+              onChange={(v) => onChange({ subtitleFont: v })}
             />
             <Text style={styles.muted}>{t.styleHint}</Text>
             <Button
               label={t.resetStyle}
               kind="ghost"
               small
-              disabled={
-                settings.fontScale === STANDARD_LOOK.fontScale &&
-                settings.subtitleColor === STANDARD_LOOK.color &&
-                settings.subtitleBackground === STANDARD_LOOK.background
-              }
-              onPress={() =>
-                onChange({
-                  fontScale: STANDARD_LOOK.fontScale,
-                  subtitleColor: STANDARD_LOOK.color,
-                  subtitleBackground: STANDARD_LOOK.background,
-                })
-              }
+              disabled={JSON.stringify(lookFromSettings(settings)) === JSON.stringify(STANDARD_LOOK)}
+              onPress={() => onChange(lookToSettings(STANDARD_LOOK))}
             />
           </Card>
 

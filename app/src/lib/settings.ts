@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { useCallback, useEffect, useState } from 'react'
-import { STANDARD_LOOK } from './cast'
+import { normalizeLook, STANDARD_LOOK, type SubtitleBackground, type SubtitleColor, type SubtitleEdge, type SubtitleFont, type SubtitleLook } from './cast'
 import { withEnglishFirst } from './languages'
 import { OPENSUBTITLES_ADDON } from './subtitles'
 
@@ -15,8 +15,10 @@ export type Settings = {
   relayUrl: string
   /** Chromecast subtitle size, 1 = receiver default. */
   fontScale: number
-  subtitleColor: 'white' | 'yellow'
-  subtitleBackground: 'none' | 'box'
+  subtitleColor: SubtitleColor
+  subtitleEdge: SubtitleEdge
+  subtitleBackground: SubtitleBackground
+  subtitleFont: SubtitleFont
   autoSearch: boolean
   /** Stremio stream add-ons (e.g. Torrentio with debrid), for the next episode. */
   streamAddons: string[]
@@ -35,7 +37,9 @@ export function defaultSettings(): Settings {
     relayUrl: extra.relayUrl ?? '',
     fontScale: STANDARD_LOOK.fontScale,
     subtitleColor: STANDARD_LOOK.color,
+    subtitleEdge: STANDARD_LOOK.edge,
     subtitleBackground: STANDARD_LOOK.background,
+    subtitleFont: STANDARD_LOOK.font,
     autoSearch: true,
     streamAddons: [],
     autoNext: true,
@@ -55,6 +59,15 @@ export async function loadSettings(): Promise<Settings> {
       relayUrl: saved.relayUrl || defaults.relayUrl,
       addons: saved.addons?.length ? saved.addons : defaults.addons,
       languages: withEnglishFirst(saved.languages ?? []),
+      ...lookToSettings(
+        normalizeLook({
+          fontScale: saved.fontScale,
+          color: saved.subtitleColor,
+          edge: saved.subtitleEdge,
+          background: saved.subtitleBackground,
+          font: saved.subtitleFont,
+        }),
+      ),
     }
   } catch {
     return defaults
@@ -78,4 +91,12 @@ export function useSettings() {
   }, [])
 
   return { settings, update }
+}
+
+export function lookFromSettings(s: Settings): SubtitleLook {
+  return { fontScale: s.fontScale, color: s.subtitleColor, edge: s.subtitleEdge, background: s.subtitleBackground, font: s.subtitleFont }
+}
+
+export function lookToSettings(l: SubtitleLook): Pick<Settings, 'fontScale' | 'subtitleColor' | 'subtitleEdge' | 'subtitleBackground' | 'subtitleFont'> {
+  return { fontScale: l.fontScale, subtitleColor: l.color, subtitleEdge: l.edge, subtitleBackground: l.background, subtitleFont: l.font }
 }
