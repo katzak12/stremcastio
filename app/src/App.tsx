@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import GoogleCast, {
   CastButton,
   CastState,
@@ -651,6 +651,31 @@ function Main() {
   const playerState = mediaStatus?.playerState
   const isPaused = playerState === MediaPlayerState.PAUSED
 
+  // ---------- remote control (full screen while casting) ----------
+
+  const [remoteOpen, setRemoteOpen] = useState(false)
+  const playingNow = !!stream && connected && isPlayingOurs
+  const autoOpenedFor = useRef<string | null>(null)
+  useEffect(() => {
+    // Open the remote once per video, as soon as it starts on the TV.
+    if (playingNow && stream && autoOpenedFor.current !== stream.url) {
+      autoOpenedFor.current = stream.url
+      setRemoteOpen(true)
+    }
+    // Close it when playback has really ended (not during a quick reload for sync or audio).
+    if (playingNow) return
+    const timer = setTimeout(() => setRemoteOpen(false), 5000)
+    return () => clearTimeout(timer)
+  }, [playingNow, stream])
+
+  const subtitlesOn = activeIds.includes(SUBTITLE_TRACK_ID)
+  const toggleSubtitles = () => {
+    const others = activeIds.filter((x) => x !== SUBTITLE_TRACK_ID)
+    client?.setActiveTrackIds(subtitlesOn ? others : [SUBTITLE_TRACK_ID, ...others]).catch(() => {})
+  }
+  const playbackRate = mediaStatus?.playbackRate ?? 1
+  const seekBy = (sec: number) => client?.seek({ position: sec, relative: true }).catch(() => {})
+
   if (!settings) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
@@ -808,95 +833,173 @@ function Main() {
           </Card>
         )}
 
-        {/* ---------- now playing ---------- */}
-        {stream && connected && isPlayingOurs && (
+        {/* ---------- now playing: compact here, full remote in a sheet ---------- */}
+        {playingNow && (
           <Card title={`${t.casting} ${device?.friendlyName ?? 'TV'}`}>
-            <View style={[styles.row, { justifyContent: 'space-between' }]}>
-              <Button label="−10s" onPress={() => client?.seek({ position: -10, relative: true })} />
+            <View style={styles.row}>
               <Button
-                label={isPaused ? `▶ ${t.play}` : `❚❚ ${t.pause}`}
+                label={isPaused ? '▶' : '❚❚'}
                 kind="primary"
-                style={{ flex: 1 }}
                 onPress={() => (isPaused ? client?.play() : client?.pause())}
               />
-              <Button label="+10s" onPress={() => client?.seek({ position: 10, relative: true })} />
-            </View>
-            <ProgressBar
-              position={position ?? mediaStatus?.streamPosition ?? 0}
-              duration={mediaStatus?.mediaInfo?.streamDuration ?? 0}
-              onSeek={(p) => client?.seek({ position: p })}
-            />
-            <VolumeControl />
-            {selected && (
-              <View style={{ gap: 8 }}>
-                <Text style={styles.muted}>
-                  {t.syncTitle}: {offsetMs > 0 ? '+' : ''}
-                  {(offsetMs / 1000).toFixed(2)}s{offsetSaved ? ` · ${t.saved}` : ''}
-                </Text>
-                <View style={styles.row}>
-                  <Button label={`◀ ${t.earlier}`} small style={{ flex: 1 }} onPress={() => nudgeSync(-SYNC_STEP_MS)} />
-                  <Button label={`${t.later} ▶`} small style={{ flex: 1 }} onPress={() => nudgeSync(SYNC_STEP_MS)} />
-                </View>
-              </View>
-            )}
-            {audioTracks.length > 1 && activeAudio !== undefined && (
-              <View style={{ gap: 8 }}>
-                <Text style={styles.muted}>{t.audio}</Text>
-                <Chips
-                  options={audioTracks.map((tr, i) => ({
-                    value: tr.id,
-                    label: tr.name || (tr.language ? langName(tr.language) : `${t.audio} ${i + 1}`),
-                  }))}
-                  value={activeAudio}
-                  onChange={chooseAudio}
-                />
-              </View>
-            )}
-            <View style={{ gap: 8 }}>
-              <Text style={styles.muted}>
-                {t.sleepTimer}
-                {typeof sleep === 'number' && sleepEndsAt
-                  ? ` · ${t.stopsAt} ${new Date(sleepEndsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                  : sleep === 'end'
-                    ? ` · ${t.stopsAfterThis}`
-                    : ''}
-              </Text>
-              <Chips<SleepMode>
-                options={[
-                  { value: 'off', label: t.off },
-                  { value: 'end', label: t.endOfVideo },
-                  { value: 15, label: '15 min' },
-                  { value: 30, label: '30 min' },
-                  { value: 60, label: '60 min' },
-                  { value: 90, label: '90 min' },
-                ]}
-                value={sleep}
-                onChange={chooseSleep}
-              />
-            </View>
-            {nextUp.status !== 'idle' && (
-              <View style={[styles.selectRow, { gap: 6 }]}>
-                <Text style={styles.cardTitle}>{t.upNext}</Text>
-                {nextUp.label ? <Text style={styles.text}>{nextUp.label}</Text> : null}
-                {nextUp.status === 'preparing' && (
-                  <View style={styles.row}>
-                    <ActivityIndicator color={colors.accent} size="small" />
-                    <Text style={styles.muted}>{t.preparingNext}</Text>
-                  </View>
-                )}
-                {nextUp.status === 'notfound' && <Text style={styles.muted}>{t.nextNotFound}</Text>}
-                {nextUp.status === 'noaddon' && <Text style={styles.muted}>{t.nextNeedsAddon}</Text>}
-                {nextUp.status === 'ready' && (
-                  <Button label={`⏭ ${t.playNow}`} small onPress={() => client?.queueNext()} />
-                )}
-              </View>
-            )}
-            <View style={styles.row}>
-              <Button label={t.bigControls} small style={{ flex: 1 }} onPress={() => GoogleCast.showExpandedControls()} />
-              <Button label={t.stop} small style={{ flex: 1 }} onPress={() => client?.stop()} />
+              <Button label={`🎛  ${t.openRemote}`} style={{ flex: 1 }} onPress={() => setRemoteOpen(true)} />
             </View>
           </Card>
         )}
+
+        <Modal visible={remoteOpen && !!stream && connected} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setRemoteOpen(false)}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
+            <View style={[styles.row, { justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }]}>
+              <Pressable accessibilityLabel={t.done} onPress={() => setRemoteOpen(false)} hitSlop={16}>
+                <Text style={{ color: colors.text, fontSize: 30, lineHeight: 34 }}>⌄</Text>
+              </Pressable>
+              <Text style={[styles.muted, { flex: 1, textAlign: 'center' }]} numberOfLines={1}>
+                {t.casting} {device?.friendlyName ?? 'TV'}
+              </Text>
+              <CastButton style={{ width: ICON_SIZE, height: ICON_SIZE, tintColor: colors.text }} />
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 20, gap: 22, paddingBottom: 60 }}>
+              <View style={{ alignItems: 'center', gap: 8 }}>
+                {details?.poster ? (
+                  <Image source={{ uri: details.poster }} style={{ width: 150, height: 225, borderRadius: 12 }} />
+                ) : null}
+                <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800', textAlign: 'center' }} numberOfLines={2}>
+                  {details?.name ?? stream?.title}
+                </Text>
+                {stream?.season !== undefined && stream?.episode !== undefined && (
+                  <Text style={styles.muted}>
+                    S{String(stream.season).padStart(2, '0')}E{String(stream.episode).padStart(2, '0')}
+                    {details?.episodeTitle ? ` · ${details.episodeTitle}` : ''}
+                  </Text>
+                )}
+              </View>
+
+              <ProgressBar
+                big
+                position={position ?? mediaStatus?.streamPosition ?? 0}
+                duration={mediaStatus?.mediaInfo?.streamDuration ?? 0}
+                onSeek={(p) => client?.seek({ position: p })}
+              />
+
+              <View style={[styles.row, { justifyContent: 'space-between', alignItems: 'center' }]}>
+                <RoundButton label="−30" size={56} onPress={() => seekBy(-30)} />
+                <RoundButton label="−10" size={64} onPress={() => seekBy(-10)} />
+                <RoundButton
+                  label={isPaused ? '▶' : '❚❚'}
+                  size={88}
+                  primary
+                  onPress={() => (isPaused ? client?.play() : client?.pause())}
+                />
+                <RoundButton label="+10" size={64} onPress={() => seekBy(10)} />
+                <RoundButton label="+30" size={56} onPress={() => seekBy(30)} />
+              </View>
+
+              <VolumeControl big />
+
+              {selected && (
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.muted}>{t.subtitlesTitle}</Text>
+                  <Chips
+                    options={[
+                      { value: 'on', label: t.on },
+                      { value: 'off', label: t.off },
+                    ]}
+                    value={subtitlesOn ? 'on' : 'off'}
+                    onChange={(v) => (v === 'on') !== subtitlesOn && toggleSubtitles()}
+                  />
+                </View>
+              )}
+              {selected && (
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.muted}>
+                    {t.syncTitle}: {offsetMs > 0 ? '+' : ''}
+                    {(offsetMs / 1000).toFixed(2)}s{offsetSaved ? ` · ${t.saved}` : ''}
+                  </Text>
+                  <View style={styles.row}>
+                    <Button label={`◀ ${t.earlier}`} small style={{ flex: 1 }} onPress={() => nudgeSync(-SYNC_STEP_MS)} />
+                    <Button label={`${t.later} ▶`} small style={{ flex: 1 }} onPress={() => nudgeSync(SYNC_STEP_MS)} />
+                  </View>
+                </View>
+              )}
+              {audioTracks.length > 1 && activeAudio !== undefined && (
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.muted}>{t.audio}</Text>
+                  <Chips
+                    options={audioTracks.map((tr, i) => ({
+                      value: tr.id,
+                      label: tr.name || (tr.language ? langName(tr.language) : `${t.audio} ${i + 1}`),
+                    }))}
+                    value={activeAudio}
+                    onChange={chooseAudio}
+                  />
+                </View>
+              )}
+              <View style={{ gap: 8 }}>
+                <Text style={styles.muted}>
+                  {t.sleepTimer}
+                  {typeof sleep === 'number' && sleepEndsAt
+                    ? ` · ${t.stopsAt} ${new Date(sleepEndsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    : sleep === 'end'
+                      ? ` · ${t.stopsAfterThis}`
+                      : ''}
+                </Text>
+                <Chips<SleepMode>
+                  options={[
+                    { value: 'off', label: t.off },
+                    { value: 'end', label: t.endOfVideo },
+                    { value: 15, label: '15 min' },
+                    { value: 30, label: '30 min' },
+                    { value: 60, label: '60 min' },
+                    { value: 90, label: '90 min' },
+                  ]}
+                  value={sleep}
+                  onChange={chooseSleep}
+                />
+              </View>
+              {nextUp.status !== 'idle' && (
+                <View style={[styles.selectRow, { gap: 6 }]}>
+                  <Text style={styles.cardTitle}>{t.upNext}</Text>
+                  {nextUp.label ? <Text style={styles.text}>{nextUp.label}</Text> : null}
+                  {nextUp.status === 'preparing' && (
+                    <View style={styles.row}>
+                      <ActivityIndicator color={colors.accent} size="small" />
+                      <Text style={styles.muted}>{t.preparingNext}</Text>
+                    </View>
+                  )}
+                  {nextUp.status === 'notfound' && <Text style={styles.muted}>{t.nextNotFound}</Text>}
+                  {nextUp.status === 'noaddon' && <Text style={styles.muted}>{t.nextNeedsAddon}</Text>}
+                  {nextUp.status === 'ready' && (
+                    <Button label={`⏭ ${t.playNow}`} small onPress={() => client?.queueNext()} />
+                  )}
+                </View>
+              )}
+              {audioTracksForStream.length > 1 && chosenAudio && (
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.muted}>{t.audio}</Text>
+                  <Chips
+                    options={audioTracksForStream.map((tr) => ({
+                      value: tr.number,
+                      label: `${audioTrackLabel(tr)}${tr.playable ? '' : ` · ${t.audioNoSound}`}`,
+                    }))}
+                    value={chosenAudio.number}
+                    onChange={pickAudio}
+                  />
+                </View>
+              )}
+
+              <View style={{ gap: 8 }}>
+                <Text style={styles.muted}>{t.speed}</Text>
+                <Chips
+                  options={[0.75, 1, 1.25, 1.5].map((r) => ({ value: r, label: `${r}×` }))}
+                  value={[0.75, 1, 1.25, 1.5].includes(playbackRate) ? playbackRate : 1}
+                  onChange={(r) => client?.setPlaybackRate(r).catch(() => {})}
+                />
+              </View>
+
+              <Button label={`■  ${t.stop}`} onPress={() => client?.stop()} />
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
 
         {castError && (
           <Card>
@@ -1022,7 +1125,9 @@ function VideoInfo({ stream, details }: { stream: StreamInfo; details: MediaDeta
 }
 
 /** Tap anywhere on the bar to jump there. */
-function ProgressBar({ position, duration, onSeek }: { position: number; duration: number; onSeek: (p: number) => void }) {
+function ProgressBar({ position, duration, onSeek, big }: { position: number; duration: number; onSeek: (p: number) => void; big?: boolean }) {
+  const bar = big ? 10 : 6
+  const knob = big ? 22 : 14
   const [width, setWidth] = useState(0)
   const progress = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0
   return (
@@ -1032,25 +1137,25 @@ function ProgressBar({ position, duration, onSeek }: { position: number; duratio
         onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         onPress={(e) => width > 0 && onSeek((e.nativeEvent.locationX / width) * duration)}
         hitSlop={{ top: 14, bottom: 14 }}
-        style={{ height: 6, borderRadius: 3, backgroundColor: '#2C303C', justifyContent: 'center' }}
+        style={{ height: bar, borderRadius: bar / 2, backgroundColor: '#2C303C', justifyContent: 'center' }}
       >
-        <View pointerEvents="none" style={{ width: `${progress * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.accent }} />
+        <View pointerEvents="none" style={{ width: `${progress * 100}%`, height: bar, borderRadius: bar / 2, backgroundColor: colors.accent }} />
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            left: Math.max(0, progress * width - 7),
-            width: 14,
-            height: 14,
-            borderRadius: 7,
+            left: Math.max(0, progress * width - knob / 2),
+            width: knob,
+            height: knob,
+            borderRadius: knob / 2,
             backgroundColor: colors.text,
           }}
         />
       </Pressable>
       <View style={[styles.row, { justifyContent: 'space-between' }]}>
-        <Text style={[styles.muted, { fontSize: 12 }]}>{formatClock(position)}</Text>
+        <Text style={[styles.muted, { fontSize: big ? 15 : 12 }]}>{formatClock(position)}</Text>
         {duration > 0 && (
-          <Text style={[styles.muted, { fontSize: 12 }]}>
+          <Text style={[styles.muted, { fontSize: big ? 15 : 12 }]}>
             −{formatClock(duration - position)} {t.left}
           </Text>
         )}
@@ -1059,10 +1164,11 @@ function ProgressBar({ position, duration, onSeek }: { position: number; duratio
   )
 }
 
-/** Chromecast volume: drag or tap the bar, or use − / +. */
-function VolumeControl() {
+/** Chromecast volume: drag or tap the bar, use − / +, or tap the speaker to mute. */
+function VolumeControl({ big }: { big?: boolean }) {
   const session = useCastSession()
   const [volume, setVolume] = useState<number | null>(null)
+  const [muted, setMuted] = useState(false)
   const [width, setWidth] = useState(0)
   const lastSent = useRef(0)
   const dragging = useRef(false)
@@ -1071,11 +1177,16 @@ function VolumeControl() {
   useEffect(() => {
     if (!session) return
     let alive = true
-    const poll = () =>
+    const poll = () => {
       session
         .getVolume()
         .then((v) => alive && !dragging.current && setVolume(v))
         .catch(() => {})
+      session
+        .isMute()
+        .then((m) => alive && setMuted(m))
+        .catch(() => {})
+    }
     poll()
     const timer = setInterval(poll, 2000)
     return () => {
@@ -1089,22 +1200,49 @@ function VolumeControl() {
   const send = (v: number, force = false) => {
     const clamped = Math.round(Math.min(1, Math.max(0, v)) * 100) / 100
     setVolume(clamped)
+    if (muted && clamped > 0) {
+      session.setMute(false)
+      setMuted(false)
+    }
     if (force || Date.now() - lastSent.current > 120) {
       lastSent.current = Date.now()
       session.setVolume(clamped)
     }
   }
+  const toggleMute = () => {
+    session.setMute(!muted)
+    setMuted(!muted)
+  }
   const fromX = (x: number) => (width > 0 ? x / width : volume)
+  const silent = muted || volume === 0
+  const bar = big ? 12 : 6
+  const knob = big ? 28 : 18
 
   return (
     <View style={{ gap: 6 }}>
-      <Text style={styles.muted}>
-        {t.volume} · {Math.round(volume * 100)}%
+      <Text style={[styles.muted, silent && { color: colors.warn }]}>
+        {t.volume} · {muted ? t.muted : `${Math.round(volume * 100)}%`}
       </Text>
-      <View style={styles.row}>
-        <Button label="−" small onPress={() => send(volume - 0.05, true)} />
+      <View style={[styles.row, { alignItems: 'center' }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={muted ? t.unmute : t.mute}
+          onPress={toggleMute}
+          hitSlop={10}
+          style={{
+            width: big ? 52 : 40,
+            height: big ? 52 : 40,
+            borderRadius: 999,
+            backgroundColor: silent ? colors.warn : '#242733',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ fontSize: big ? 24 : 18 }}>{silent ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</Text>
+        </Pressable>
+        {big && <Button label="−" onPress={() => send(volume - 0.05, true)} />}
         <View
-          style={{ flex: 1, height: 32, justifyContent: 'center' }}
+          style={{ flex: 1, height: big ? 52 : 32, justifyContent: 'center' }}
           onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
@@ -1121,23 +1259,51 @@ function VolumeControl() {
             dragging.current = false
           }}
         >
-          <View pointerEvents="none" style={{ height: 6, borderRadius: 3, backgroundColor: '#2C303C' }}>
-            <View style={{ width: `${volume * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.accent }} />
+          <View pointerEvents="none" style={{ height: bar, borderRadius: bar / 2, backgroundColor: '#2C303C' }}>
+            <View
+              style={{
+                width: `${volume * 100}%`,
+                height: bar,
+                borderRadius: bar / 2,
+                backgroundColor: muted ? colors.muted : colors.accent,
+              }}
+            />
           </View>
           <View
             pointerEvents="none"
             style={{
               position: 'absolute',
-              left: Math.max(0, volume * width - 9),
-              width: 18,
-              height: 18,
-              borderRadius: 9,
+              left: Math.max(0, volume * width - knob / 2),
+              width: knob,
+              height: knob,
+              borderRadius: knob / 2,
               backgroundColor: colors.text,
             }}
           />
         </View>
-        <Button label="+" small onPress={() => send(volume + 0.05, true)} />
+        {big && <Button label="+" onPress={() => send(volume + 0.05, true)} />}
       </View>
     </View>
+  )
+}
+
+function RoundButton({ label, onPress, size, primary }: { label: string; onPress: () => void; size: number; primary?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: primary ? colors.accent : '#242733',
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <Text style={{ color: colors.text, fontSize: primary ? 30 : 17, fontWeight: '700' }}>{label}</Text>
+    </Pressable>
   )
 }
