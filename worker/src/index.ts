@@ -267,9 +267,17 @@ async function handleMedia(req: Request, url: URL, ctx?: ExecutionContext): Prom
 
   // The requested bytes include the header bytes we change: read up to the last one, patch, then pipe the rest.
   const headEnd = inRange[inRange.length - 1].offset
-  const headRes = await fetch(src.toString(), { headers: { ...UA, Range: `bytes=${start}-${headEnd}` }, redirect: 'follow' })
+  // Ask the source for both parts at once: a slow first byte from the source shouldn't count twice.
+  const needRest = end === null || headEnd < end
+  const [headRes, rest] = await Promise.all([
+    fetch(src.toString(), { headers: { ...UA, Range: `bytes=${start}-${headEnd}` }, redirect: 'follow' }),
+    needRest
+      ? fetch(src.toString(), { headers: { ...UA, Range: `bytes=${headEnd + 1}-${end ?? ''}` }, redirect: 'follow' })
+      : Promise.resolve(null),
+  ])
   if (headRes.status !== 206 || isPage(headRes)) {
     await headRes.body?.cancel()
+    await rest?.body?.cancel()
     return json({ error: `Video source returned ${headRes.status} for a byte range` }, 502)
   }
   const total = totalFrom(headRes)
@@ -277,7 +285,10 @@ async function handleMedia(req: Request, url: URL, ctx?: ExecutionContext): Prom
   applyPatches(head, start, inRange)
 
   const lastByte = end ?? (total !== null ? total - 1 : null)
-  if (lastByte === null) return json({ error: 'Video source did not report its size' }, 502)
+  if (lastByte === null) {
+    await rest?.body?.cancel()
+    return json({ error: 'Video source did not report its size' }, 502)
+  }
   const length = lastByte - start + 1
   const headers = mediaHeaders(headRes.headers)
   headers.set('content-length', String(length))
@@ -285,12 +296,10 @@ async function handleMedia(req: Request, url: URL, ctx?: ExecutionContext): Prom
   else headers.delete('content-range')
   const status = range ? 206 : 200
 
-  if (headEnd >= lastByte) return new Response(head.subarray(0, length), { status, headers })
-
-  const rest = await fetch(src.toString(), {
-    headers: { ...UA, Range: `bytes=${headEnd + 1}-${end ?? ''}` },
-    redirect: 'follow',
-  })
+  if (!rest || headEnd >= lastByte) {
+    await rest?.body?.cancel()
+    return new Response(head.subarray(0, length), { status, headers })
+  }
   if (rest.status !== 206 || !rest.body) {
     await rest.body?.cancel()
     return json({ error: `Video source returned ${rest.status} for a byte range` }, 502)

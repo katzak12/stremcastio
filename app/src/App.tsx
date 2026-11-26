@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, ScrollView
 import GoogleCast, {
   CastButton,
   CastState,
+  MediaPlayerIdleReason,
   MediaPlayerState,
   useCastDevice,
   useDevices,
@@ -249,6 +250,11 @@ function Main() {
 
   const look: SubtitleLook | null = settings ? lookFromSettings(settings) : null
 
+  // The TV sometimes starts loading and then gives up (slow source on the first request).
+  // Watch the first minute after a load and try again by itself, like tapping Cast again.
+  const loadWatch = useRef<{ at: number; startTime: number; offset: number; retries: number } | null>(null)
+  const retryingLoad = useRef(false)
+
   const loadOnTv = useCallback(
     async (startTime = 0, offset = offsetMs, sleepState: { mode: SleepMode; endsAt: number | null } = { mode: sleep, endsAt: sleepEndsAt }) => {
       if (!client || !stream || !settings || !look) return
@@ -270,6 +276,13 @@ function Main() {
         preparedFor.current = null
         setNextUp({ status: 'idle' })
         await loadWithRetry(client, request)
+        loadWatch.current = {
+          at: Date.now(),
+          startTime,
+          offset,
+          retries: retryingLoad.current ? (loadWatch.current?.retries ?? 0) : 0,
+        }
+        retryingLoad.current = false
         reconnectTried.current = false
         await activateSubtitles(client, vttUrl != null, look)
       } catch (e) {
@@ -404,7 +417,8 @@ function Main() {
     if (pendingCast && connected) {
       setPendingCast(false)
       setReconnecting(false)
-      startCasting()
+      // Let the TV picker finish closing first: iOS drops an alert ("continue watching?") shown during that.
+      setTimeout(() => startCasting(), 800)
     }
   }, [pendingCast, connected, startCasting])
 
@@ -651,6 +665,27 @@ function Main() {
   const playerState = mediaStatus?.playerState
   const isPaused = playerState === MediaPlayerState.PAUSED
 
+  useEffect(() => {
+    const watch = loadWatch.current
+    if (!watch || !client) return
+    if (playerState === MediaPlayerState.PLAYING) {
+      loadWatch.current = null
+      return
+    }
+    const failed = playerState === MediaPlayerState.IDLE && mediaStatus?.idleReason === MediaPlayerIdleReason.ERROR
+    if (!failed || Date.now() - watch.at > 60000) return
+    if (watch.retries >= 2) {
+      loadWatch.current = null
+      setCastError(t.tvCouldNotPlay)
+      return
+    }
+    watch.retries += 1
+    watch.at = Date.now()
+    retryingLoad.current = true
+    const timer = setTimeout(() => loadOnTv(watch.startTime, watch.offset), 1500)
+    return () => clearTimeout(timer)
+  }, [playerState, mediaStatus?.idleReason, client, loadOnTv])
+
   // ---------- remote control (full screen while casting) ----------
 
   const [remoteOpen, setRemoteOpen] = useState(false)
@@ -833,20 +868,7 @@ function Main() {
           </Card>
         )}
 
-        {/* ---------- now playing: compact here, full remote in a sheet ---------- */}
-        {playingNow && (
-          <Card title={`${t.casting} ${device?.friendlyName ?? 'TV'}`}>
-            <View style={styles.row}>
-              <Button
-                label={isPaused ? '▶' : '❚❚'}
-                kind="primary"
-                onPress={() => (isPaused ? client?.play() : client?.pause())}
-              />
-              <Button label={`🎛  ${t.openRemote}`} style={{ flex: 1 }} onPress={() => setRemoteOpen(true)} />
-            </View>
-          </Card>
-        )}
-
+        {/* ---------- full remote in a sheet; the bottom bar shows what plays ---------- */}
         <Modal visible={remoteOpen && !!stream && connected} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setRemoteOpen(false)}>
           <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
             <View style={[styles.row, { justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }]}>
@@ -893,8 +915,6 @@ function Main() {
                 <RoundButton label="+10" size={64} onPress={() => seekBy(10)} />
                 <RoundButton label="+30" size={56} onPress={() => seekBy(30)} />
               </View>
-
-              <VolumeControl big />
 
               {selected && (
                 <View style={{ gap: 8 }}>
@@ -1014,7 +1034,51 @@ function Main() {
         )}
       </ScrollView>
 
-      {stream && !(connected && isPlayingOurs) && (
+      {playingNow && stream && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.openRemote}
+          onPress={() => setRemoteOpen(true)}
+          style={{
+            position: 'absolute',
+            left: 16,
+            right: 16,
+            bottom: 28,
+            minHeight: 72,
+            borderRadius: 18,
+            backgroundColor: '#242733',
+            borderWidth: 1,
+            borderColor: colors.accent,
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: 10,
+            gap: 12,
+          }}
+        >
+          {details?.poster ? <Image source={{ uri: details.poster }} style={{ width: 40, height: 60, borderRadius: 6 }} /> : null}
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: colors.text, fontWeight: '700' }} numberOfLines={1}>
+              {details?.name ?? stream.title}
+            </Text>
+            <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
+              {chosenAudio ? `🔊 ${audioTrackLabel(chosenAudio)}` : `${t.casting} ${device?.friendlyName ?? 'TV'}`}
+            </Text>
+            <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
+              💬 {selected && subtitlesOn ? (selected.source === 'stremio' ? t.fromStremio : langName(selected.lang)) : t.off}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel={isPaused ? t.play : t.pause}
+            onPress={() => (isPaused ? client?.play() : client?.pause())}
+            hitSlop={10}
+            style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>{isPaused ? '▶' : '❚❚'}</Text>
+          </Pressable>
+        </Pressable>
+      )}
+
+      {stream && !playingNow && (
         <View style={{ position: 'absolute', left: 16, right: 16, bottom: 28 }}>
           <Button
             label={
@@ -1159,129 +1223,6 @@ function ProgressBar({ position, duration, onSeek, big }: { position: number; du
             −{formatClock(duration - position)} {t.left}
           </Text>
         )}
-      </View>
-    </View>
-  )
-}
-
-/** Chromecast volume: drag or tap the bar, use − / +, or tap the speaker to mute. */
-function VolumeControl({ big }: { big?: boolean }) {
-  const session = useCastSession()
-  const [volume, setVolume] = useState<number | null>(null)
-  const [muted, setMuted] = useState(false)
-  const [width, setWidth] = useState(0)
-  const lastSent = useRef(0)
-  const dragging = useRef(false)
-
-  // Follow changes made elsewhere (TV remote, other phones).
-  useEffect(() => {
-    if (!session) return
-    let alive = true
-    const poll = () => {
-      session
-        .getVolume()
-        .then((v) => alive && !dragging.current && setVolume(v))
-        .catch(() => {})
-      session
-        .isMute()
-        .then((m) => alive && setMuted(m))
-        .catch(() => {})
-    }
-    poll()
-    const timer = setInterval(poll, 2000)
-    return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [session])
-
-  if (!session || volume == null) return null
-
-  const send = (v: number, force = false) => {
-    const clamped = Math.round(Math.min(1, Math.max(0, v)) * 100) / 100
-    setVolume(clamped)
-    if (muted && clamped > 0) {
-      session.setMute(false)
-      setMuted(false)
-    }
-    if (force || Date.now() - lastSent.current > 120) {
-      lastSent.current = Date.now()
-      session.setVolume(clamped)
-    }
-  }
-  const toggleMute = () => {
-    session.setMute(!muted)
-    setMuted(!muted)
-  }
-  const fromX = (x: number) => (width > 0 ? x / width : volume)
-  const silent = muted || volume === 0
-  const bar = big ? 12 : 6
-  const knob = big ? 28 : 18
-
-  return (
-    <View style={{ gap: 6 }}>
-      <Text style={[styles.muted, silent && { color: colors.warn }]}>
-        {t.volume} · {muted ? t.muted : `${Math.round(volume * 100)}%`}
-      </Text>
-      <View style={[styles.row, { alignItems: 'center' }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={muted ? t.unmute : t.mute}
-          onPress={toggleMute}
-          hitSlop={10}
-          style={{
-            width: big ? 52 : 40,
-            height: big ? 52 : 40,
-            borderRadius: 999,
-            backgroundColor: silent ? colors.warn : '#242733',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ fontSize: big ? 24 : 18 }}>{silent ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</Text>
-        </Pressable>
-        {big && <Button label="−" onPress={() => send(volume - 0.05, true)} />}
-        <View
-          style={{ flex: 1, height: big ? 52 : 32, justifyContent: 'center' }}
-          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-          onStartShouldSetResponder={() => true}
-          onMoveShouldSetResponder={() => true}
-          onResponderGrant={(e) => {
-            dragging.current = true
-            send(fromX(e.nativeEvent.locationX))
-          }}
-          onResponderMove={(e) => send(fromX(e.nativeEvent.locationX))}
-          onResponderRelease={(e) => {
-            send(fromX(e.nativeEvent.locationX), true)
-            dragging.current = false
-          }}
-          onResponderTerminate={() => {
-            dragging.current = false
-          }}
-        >
-          <View pointerEvents="none" style={{ height: bar, borderRadius: bar / 2, backgroundColor: '#2C303C' }}>
-            <View
-              style={{
-                width: `${volume * 100}%`,
-                height: bar,
-                borderRadius: bar / 2,
-                backgroundColor: muted ? colors.muted : colors.accent,
-              }}
-            />
-          </View>
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: Math.max(0, volume * width - knob / 2),
-              width: knob,
-              height: knob,
-              borderRadius: knob / 2,
-              backgroundColor: colors.text,
-            }}
-          />
-        </View>
-        {big && <Button label="+" onPress={() => send(volume + 0.05, true)} />}
       </View>
     </View>
   )

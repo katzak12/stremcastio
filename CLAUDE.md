@@ -85,6 +85,13 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   The main screen keeps a small "now playing" card with play/pause and "Open remote". iPhone volume buttons no longer
   change the TV volume: `plugins/withCastVolumeButtons.js` sets physicalVolumeButtonsWillControlDeviceVolume = false
   (must be listed before react-native-google-cast in app.json; verified with expo prebuild).
+- 0.2.6 (Guus's LG C4 test: casting needed 3 taps: 1st only the blue cast icon, 2nd showed the title loading then
+  dropped, 3rd worked; the volume slider did nothing on the TV's built-in Cast): after picking a TV the app waits
+  800 ms before casting (iOS drops the "continue watching?" alert while the picker closes); when the TV goes IDLE with
+  idleReason ERROR within a minute of a load, the app loads again by itself (2 retries, then "TV couldn't play");
+  volume slider removed; while playing, the bottom "Cast to TV" button becomes a now-playing bar (poster, title,
+  audio track, subtitles, play/pause; tap = open remote). Relay /media fetches the patched head and the rest in parallel.
+  Also: "[LG] webOS TV …" in the picker is the TV's built-in Google Cast.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions
