@@ -683,6 +683,12 @@ function Main() {
           {stream ? (
             <View style={{ gap: 10 }}>
               <VideoInfo stream={stream} details={details} />
+              {fileAudio.loading && fileAudio.url === stream.url && (
+                <View style={styles.row}>
+                  <ActivityIndicator color={colors.accent} size="small" />
+                  <Text style={styles.muted}>{t.audioLoading}</Text>
+                </View>
+              )}
               {audioTracksForStream.length > 1 && chosenAudio && (
                 <View style={{ gap: 8 }}>
                   <Text style={styles.muted}>{t.audio}</Text>
