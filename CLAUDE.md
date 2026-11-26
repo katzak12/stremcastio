@@ -92,6 +92,9 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   volume slider removed; while playing, the bottom "Cast to TV" button becomes a now-playing bar (poster, title,
   audio track, subtitles, play/pause; tap = open remote). Relay /media fetches the patched head and the rest in parallel.
   Also: "[LG] webOS TV …" in the picker is the TV's built-in Google Cast.
+- 0.2.7: the now-playing bar/remote never showed with an audio track picked: the app compared the URL the TV reports
+  with the relay URL it sent by exact string, and iOS re-encodes it. Now `sameMediaUrl` (stream.ts) compares decoded
+  forms, also checks contentId and the last URL we loaded.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions
