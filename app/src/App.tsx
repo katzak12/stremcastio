@@ -438,7 +438,10 @@ function Main() {
   // ---------- audio the Chromecast can't play (DTS / TrueHD) ----------
 
   // Known tracks: only warn when the track we'd cast is silent on the TV. Otherwise guess from the file name.
-  const badAudio = !stream
+  // While the track list is still being read, say nothing: the file name often names only the first track.
+  const audioPending =
+    !!stream && !!settings?.relayUrl && isRemote(stream.url) && (fileAudio.url !== stream.url || fileAudio.loading)
+  const badAudio = !stream || audioPending
     ? null
     : audioTracksForStream.length
       ? chosenAudio && !chosenAudio.playable
