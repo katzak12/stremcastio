@@ -78,6 +78,13 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   re-casts at the same position. MP4 files are not handled (no picker). Needs the relay redeployed.
   **Not verified on hardware**: whether the Chromecast honours the patched header, and whether debrid hosts
   accept requests from Cloudflare (they may block datacenter IPs). The queued next episode still uses the default track.
+- 0.2.5 (from Guus's test on a Google TV, where DD 5.1 English via /media gave no sound; cause unknown: TV volume, the
+  header patch, or DD passthrough): full-screen remote (Modal) opens once per video when it starts on the TV:
+  poster/title, big seek bar, −30/−10/play/+10/+30, volume slider with mute (CastSession isMute/setMute; shows
+  "muted" in orange), subtitles on/off + sync, audio track, speed (setPlaybackRate), sleep timer, up next, stop.
+  The main screen keeps a small "now playing" card with play/pause and "Open remote". iPhone volume buttons no longer
+  change the TV volume: `plugins/withCastVolumeButtons.js` sets physicalVolumeButtonsWillControlDeviceVolume = false
+  (must be listed before react-native-google-cast in app.json; verified with expo prebuild).
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions
