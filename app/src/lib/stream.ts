@@ -152,3 +152,26 @@ export function parseM3u(text: string): { url: string | null; title?: string } {
   }
   return { url: null, title };
 }
+
+/**
+ * Whether two media URLs point at the same thing. The Cast SDK hands back the URL the TV plays, but
+ * iOS may re-encode it (%3A vs ":", "+" vs "%20", %2f vs %2F), so compare the decoded forms.
+ */
+export function sameMediaUrl(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false
+  if (a === b) return true
+  const norm = (u: string) => {
+    let out = u.trim().replace(/\+/g, ' ')
+    for (let i = 0; i < 3; i++) {
+      try {
+        const next = decodeURIComponent(out)
+        if (next === out) break
+        out = next
+      } catch {
+        break
+      }
+    }
+    return out
+  }
+  return norm(a) === norm(b)
+}

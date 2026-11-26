@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { sameMediaUrl } from '../src/lib/stream'
 import { audioTrackLabel, chooseAudioTrack, type FileAudioTrack } from '../src/lib/audioTracks'
 
 const track = (t: Partial<FileAudioTrack> & { number: number }): FileAudioTrack => ({
@@ -44,4 +45,12 @@ test('audioTrackLabel shows language, format and only useful names', () => {
   assert.equal(audioTrackLabel(FILE[1]), 'English · TrueHD 7.1')
   assert.match(audioTrackLabel(FILE[3]), /^English · DD 2\.0 · Commentary by/)
   assert.match(audioTrackLabel(FILE[0]), /DD\+ 5\.1 · Portuguese \(Brazil\)$/)
+})
+
+test('sameMediaUrl ignores how iOS re-encodes the relay URL', () => {
+  const sent = 'https://relay.dev/media?u=https%3A%2F%2Fcdn.test%2Fa+b.mkv&p=120.32%2C300.1'
+  assert.ok(sameMediaUrl(sent, 'https://relay.dev/media?u=https://cdn.test/a%20b.mkv&p=120.32,300.1'))
+  assert.ok(sameMediaUrl(sent, sent))
+  assert.ok(!sameMediaUrl(sent, 'https://relay.dev/media?u=https://cdn.test/other.mkv&p=120.32,300.1'))
+  assert.ok(!sameMediaUrl(null, sent))
 })

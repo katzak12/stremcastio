@@ -30,7 +30,7 @@ import { addonFromStreamUrl, findEpisodeStream, findPlayableAudioStream, unsuppo
 import { clearResume, getResume, saveResume } from './lib/resume'
 import { getSyncOffset, saveSyncOffset, syncKey } from './lib/syncMemory'
 import { lookFromSettings, useSettings } from './lib/settings'
-import { describeStream, extractUrl, type StreamInfo } from './lib/stream'
+import { describeStream, extractUrl, sameMediaUrl, type StreamInfo } from './lib/stream'
 import { lookupImdbId, rankSubtitles, searchSubtitles, stremioVideoId, type SubtitleOption } from './lib/subtitles'
 
 type SearchState = { status: 'idle' | 'searching' | 'done'; message?: string }
@@ -101,9 +101,15 @@ function Main() {
   const chosenAudio =
     audioTracksForStream.find((tr) => tr.number === audioPick) ?? chooseAudioTrack(audioTracksForStream, settings?.audioLanguage)
   const castUrl = chosenAudio?.url ?? stream?.url
-  const tvContentUrl = mediaStatus?.mediaInfo?.contentUrl
+  const tvContentUrl = mediaStatus?.mediaInfo?.contentUrl || mediaStatus?.mediaInfo?.contentId
+  // The URL we last sent to the TV for this stream (direct, or via the relay for an audio track).
+  const lastCastUrl = useRef<{ stream: string; url: string } | null>(null)
   const isPlayingOurs =
-    !!tvContentUrl && !!stream && (tvContentUrl === stream.url || audioTracksForStream.some((tr) => tr.url === tvContentUrl))
+    !!tvContentUrl &&
+    !!stream &&
+    (sameMediaUrl(tvContentUrl, stream.url) ||
+      (lastCastUrl.current?.stream === stream.url && sameMediaUrl(tvContentUrl, lastCastUrl.current.url)) ||
+      audioTracksForStream.some((tr) => sameMediaUrl(tr.url, tvContentUrl)))
   const position = useStreamPosition(1)
 
   // One IMDb lookup per stream, shared by the subtitle search and the artwork/rating.
@@ -275,6 +281,7 @@ function Main() {
         // A fresh load replaces the TV's queue, so line up the next episode again afterwards.
         preparedFor.current = null
         setNextUp({ status: 'idle' })
+        lastCastUrl.current = { stream: stream.url, url: castUrl ?? stream.url }
         await loadWithRetry(client, request)
         loadWatch.current = {
           at: Date.now(),
@@ -597,9 +604,9 @@ function Main() {
   }, [client, connected, isPlayingOurs, stream, settings, imdbId, details, selected, sleep])
 
   // The TV moved on to the queued episode: follow it in the app.
-  const tvUrl = mediaStatus?.mediaInfo?.contentUrl
+  const tvUrl = mediaStatus?.mediaInfo?.contentUrl || mediaStatus?.mediaInfo?.contentId
   useEffect(() => {
-    if (nextUp.status !== 'ready' || tvUrl !== nextUp.url) return
+    if (nextUp.status !== 'ready' || !sameMediaUrl(tvUrl, nextUp.url)) return
     for (const key of resumeKeys) clearResume(key)
     setStream(nextUp.stream)
     setIncomingSubs([])
