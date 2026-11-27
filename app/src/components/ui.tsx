@@ -71,13 +71,15 @@ export function Chips<T extends string | number>({
   options,
   value,
   onChange,
+  center,
 }: {
   options: { value: T; label: string }[]
   value: T
   onChange: (v: T) => void
+  center?: boolean
 }) {
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: center ? 'center' : 'flex-start' }}>
       {options.map((o) => {
         const active = o.value === value
         return (
