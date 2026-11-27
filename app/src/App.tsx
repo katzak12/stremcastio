@@ -26,6 +26,7 @@ import { setAppLanguage, t } from './lib/i18n'
 import { useIncoming, type Incoming } from './lib/incoming'
 import { langName, normalizeLang } from './lib/languages'
 import { fetchDetails, formatClock, formatRuntime, type MediaDetails } from './lib/meta'
+import { freshToken, hlsForAudio, matchRdAudio, rdKeyFromStreamUrl, rdStream, resolveRdId, type RdStream } from './lib/realDebrid'
 import { isRemote, relayVttUrl, uploadLocalSubtitle } from './lib/relay'
 import { addonFromStreamUrl, findEpisodeStream, findPlayableAudioStream, unsupportedAudio } from './lib/streams'
 import { clearResume, getResume, saveResume } from './lib/resume'
@@ -274,6 +275,57 @@ function Main() {
 
   const look: SubtitleLook | null = settings ? lookFromSettings(settings) : null
 
+  // ---------- Real-Debrid streaming (other spoken language, or audio the TV can't play) ----------
+
+  const rdAvailable = !!stream && (!!settings?.rdAuth || !!rdKeyFromStreamUrl(stream.url))
+  const rdCache = useRef<{ stream: string; data: RdStream } | null>(null)
+  /** Language to switch the TV to once an RD stream (HLS with all audio tracks) is playing. */
+  const pendingRdLang = useRef<string | null>(null)
+  /** The TV refused RD's stream for this video (e.g. not allowed to fetch it): don't try RD again for it. */
+  const rdBroken = useRef<string | null>(null)
+  const lastWasRd = useRef(false)
+
+  /** Best way to play the chosen audio: the original file when it can, else RD's HLS, else the relay trick. */
+  const playbackTarget = async (): Promise<{ url: string; contentType: string; rdLang?: string }> => {
+    if (!stream) throw new Error('no stream')
+    const original = { url: stream.url, contentType: stream.contentType }
+    const tracks = audioTracksForStream
+    const isDefault = !chosenAudio || chosenAudio.isDefault
+    const silentByName = tracks.length === 0 && !!unsupportedAudio(stream.filename)
+    const wantRd = rdAvailable && rdBroken.current !== stream.url && ((chosenAudio && (!isDefault || !chosenAudio.playable)) || silentByName)
+    if (!wantRd) return chosenAudio ? { url: chosenAudio.url, contentType: stream.contentType } : original
+    try {
+      const token = settings?.rdAuth
+        ? await freshToken(settings.rdAuth, (a) => update({ rdAuth: a }))
+        : rdKeyFromStreamUrl(stream.url)
+      if (!token) throw new Error('no token')
+      let data = rdCache.current?.stream === stream.url ? rdCache.current.data : null
+      if (!data) {
+        const id = await resolveRdId(stream.url, token)
+        data = id ? await rdStream(id, token) : null
+        if (data) rdCache.current = { stream: stream.url, data }
+      }
+      if (data) {
+        let url = data.hls
+        if (chosenAudio) {
+          const lang = normalizeLang(chosenAudio.language)
+          const same = tracks.filter((tr) => normalizeLang(tr.language) === lang)
+          const match = matchRdAudio(data.audio, chosenAudio, Math.max(0, same.indexOf(chosenAudio)))
+          if (match)
+            url = hlsForAudio(
+              data.hls,
+              data.audio.map((a) => a.key),
+              match.key,
+            )
+        }
+        return { url, contentType: 'application/x-mpegURL', rdLang: chosenAudio ? normalizeLang(chosenAudio.language) : undefined }
+      }
+    } catch {
+      // fall back below
+    }
+    return chosenAudio ? { url: chosenAudio.url, contentType: stream.contentType } : original
+  }
+
   // The TV sometimes starts loading and then gives up (slow source on the first request).
   // Watch the first minute after a load and try again by itself, like tapping Cast again.
   const loadWatch = useRef<{ at: number; startTime: number; offset: number; retries: number } | null>(null)
@@ -285,9 +337,11 @@ function Main() {
       setBusy(true)
       setCastError(null)
       try {
-        const vttUrl = await resolveVtt(selected, offset)
+        const [vttUrl, target] = await Promise.all([resolveVtt(selected, offset), playbackTarget()])
+        pendingRdLang.current = target.rdLang ?? null
+        lastWasRd.current = target.contentType === 'application/x-mpegURL' && target.url !== stream.url
         const request = buildLoadRequest({
-          stream: castUrl && castUrl !== stream.url ? { ...stream, url: castUrl } : stream,
+          stream: target.url !== stream.url ? { ...stream, url: target.url, contentType: target.contentType } : stream,
           vttUrl,
           subtitleLang: selected?.lang,
           subtitleName: selected ? langName(selected.lang) : undefined,
@@ -299,7 +353,7 @@ function Main() {
         // A fresh load replaces the TV's queue, so line up the next episode again afterwards.
         preparedFor.current = null
         setNextUp({ status: 'idle' })
-        lastCastUrl.current = { stream: stream.url, url: castUrl ?? stream.url }
+        lastCastUrl.current = { stream: stream.url, url: target.url }
         await loadWithRetry(client, request)
         setWeCast(stream.url)
         loadWatch.current = {
@@ -481,7 +535,7 @@ function Main() {
   // While the track list is still being read, say nothing: the file name often names only the first track.
   const audioPending =
     !!stream && !!settings?.relayUrl && isRemote(stream.url) && (fileAudio.url !== stream.url || fileAudio.loading)
-  const badAudio = !stream || audioPending
+  const badAudio = !stream || audioPending || rdAvailable
     ? null
     : audioTracksForStream.length
       ? chosenAudio && !chosenAudio.playable
@@ -700,6 +754,15 @@ function Main() {
   // most single-file MKV/MP4 streams do not, and then this simply stays hidden).
   const audioTracks = (mediaStatus?.mediaInfo?.mediaTracks ?? []).filter((tr) => tr.type === 'audio')
   const activeAudio = audioTracks.find((tr) => activeIds.includes(tr.id))?.id ?? audioTracks[0]?.id
+  useEffect(() => {
+    const lang = pendingRdLang.current
+    if (!lang || !client || !isPlayingOurs || audioTracks.length < 2) return
+    pendingRdLang.current = null
+    const want = audioTracks.find((tr) => normalizeLang(tr.language ?? '') === lang)
+    if (!want || activeIds.includes(want.id)) return
+    const audioIds = new Set(audioTracks.map((tr) => tr.id))
+    client.setActiveTrackIds([want.id, ...activeIds.filter((x) => !audioIds.has(x))]).catch(() => {})
+  }, [audioTracks.length, isPlayingOurs, client])
   const chooseAudio = (id: number) => {
     const audioIds = new Set(audioTracks.map((tr) => tr.id))
     client?.setActiveTrackIds([id, ...activeIds.filter((x) => !audioIds.has(x))]).catch(() => {})
@@ -724,6 +787,8 @@ function Main() {
     }
     watch.retries += 1
     watch.at = Date.now()
+    // RD's stream failed on the TV: retry the normal way (original file / relay) instead.
+    if (lastWasRd.current && stream) rdBroken.current = stream.url
     retryingLoad.current = true
     const timer = setTimeout(() => loadOnTv(watch.startTime, watch.offset), 1500)
     return () => clearTimeout(timer)
@@ -973,7 +1038,7 @@ function Main() {
               }}
               lang={normalizeLang(tr.language) === 'und' ? '?' : normalizeLang(tr.language).toUpperCase()}
               title={audioTrackLabel(tr)}
-              subtitle={tr.playable ? undefined : t.audioNoSound}
+              subtitle={tr.playable || rdAvailable ? undefined : t.audioNoSound}
             />
           ))}
         </Sheet>
@@ -1043,7 +1108,7 @@ function Main() {
                     <Chips
                       options={audioTracksForStream.map((tr) => ({
                         value: tr.number,
-                        label: `${audioTrackLabel(tr)}${tr.playable ? '' : ` · ${t.audioNoSound}`}`,
+                        label: `${audioTrackLabel(tr)}${tr.playable || rdAvailable ? '' : ` · ${t.audioNoSound}`}`,
                       }))}
                       value={chosenAudio.number}
                       onChange={pickAudio}

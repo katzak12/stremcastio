@@ -9,6 +9,7 @@ import { pingRelay } from '../lib/relay'
 import { lookFromSettings, lookToSettings, type Settings } from '../lib/settings'
 import { addonBase } from '../lib/subtitles'
 import { LanguagePicker } from './LanguagePicker'
+import { RealDebridCard } from './RealDebridCard'
 import { SubtitlePreview } from './SubtitlePreview'
 import { useOwnRelay } from './useOwnRelay'
 import { Badge, Button, Card, Chips, colors, styles } from './ui'
@@ -236,6 +237,8 @@ export function SettingsModal({ visible, settings, onChange, onClose, diagnostic
               />
             </View>
           </Card>
+
+          <RealDebridCard rdAuth={settings.rdAuth} onChange={(rdAuth) => onChange({ rdAuth })} />
 
           <Card title={t.relay}>
             <Text style={styles.muted}>{t.relayHint}</Text>

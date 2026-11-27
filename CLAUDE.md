@@ -119,6 +119,18 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
 - 0.3.3: first-run introduction (`components/Onboarding.tsx`, `settings.onboarded`): 5 steps (welcome, languages,
   relay: standard or own via `useOwnRelay` hook shared with Settings, optional stream add-on, how to use). Skippable;
   Settings → How to use → "Show introduction" sets onboarded=false to show it again.
+- 0.4.0 Real-Debrid streaming (`lib/realDebrid.ts`, Guus: "as easy as possible, best result"): playback choice in
+  `playbackTarget()` (App.tsx): original file when the chosen audio is the file's default and playable (best quality);
+  else RD HLS when an RD token exists; else the relay /media patch. Token = key in the Torrentio link
+  (`/resolve/realdebrid/KEY/`, zero setup) or a linked account (Settings → Real-Debrid, device-code flow with the
+  open-source client id X245A4XAIBGVM, refresh via /oauth/v2/token; stored as settings.rdAuth). RD id: from the
+  download link (/d/{id}/), found by following the add-on redirect, else POST /unrestrict/link. Then
+  /streaming/transcode/{id} (apple.full = HLS, all audio as AAC) + /streaming/mediaInfos/{id} (details.audio keyed
+  eng1, eng2…). The audio key in the HLS path is swapped when present; after loading, the app also selects the wanted
+  language among the TV-reported audio tracks. If the TV fails on RD's HLS (CORS unknown!), the auto-retry falls back
+  to the normal path for that video (`rdBroken`). With RD available, no "no sound on TV" warnings. Intro is now 3 steps
+  (welcome, languages, how to use); relay + add-on setup only in Settings. **Not verified on hardware**: RD HLS on
+  the Chromecast, the HLS path shape, mediaInfos field names (taken from Go client libs; RD docs host unreachable).
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap
