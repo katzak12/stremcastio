@@ -8,6 +8,8 @@ import { APP_LANGUAGES, t } from '../lib/i18n'
 import { LANGUAGE_CHOICES, langName } from '../lib/languages'
 import type { Settings } from '../lib/settings'
 import { LanguagePicker } from './LanguagePicker'
+import { StremioAddonCard } from './StremioAddonCard'
+import { pickAddonBase } from '../lib/stremioAddon'
 import { Badge, Button, Chips, colors, styles } from './ui'
 
 type Props = {
@@ -100,6 +102,11 @@ export function Onboarding({ visible, settings, onChange, onDone }: Props) {
             <>
               <Title text={t.introHowTitle} />
               <Body text={Platform.OS === 'android' ? t.howToAndroid : t.howToIos} />
+              <StremioAddonCard
+                relayUrl={settings.relayUrl}
+                base={pickAddonBase({ detected: settings.detectedAddon, added: settings.streamAddons })}
+                onAddAddon={(u) => onChange({ streamAddons: [...new Set([...settings.streamAddons, u])] })}
+              />
               <Body text={t.introHowFooter} />
             </>
           )}

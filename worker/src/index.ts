@@ -15,6 +15,7 @@
 // everything after them is piped straight from the source without the Worker reading it.
 
 import { decodeBytes, isGzip, toVtt } from './convert.ts'
+import { handleStremio } from './stremio.ts'
 import {
   decodePatches,
   defaultAudio,
@@ -352,6 +353,10 @@ export default {
     const url = new URL(req.url)
     try {
       if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
+      if (url.pathname.startsWith('/stremio')) {
+        const res = await handleStremio(req, url, ctx)
+        if (res) return res
+      }
       if (url.pathname === '/vtt' && (req.method === 'GET' || req.method === 'HEAD')) return await cachedVtt(req, url, ctx)
       if (url.pathname === '/upload' && req.method === 'POST') return await handleUpload(req, url, env)
       if (url.pathname.startsWith('/s/') && req.method === 'GET') return await handleStored(url.pathname, env)

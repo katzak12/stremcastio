@@ -10,6 +10,8 @@ import { lookFromSettings, lookToSettings, type Settings } from '../lib/settings
 import { addonBase } from '../lib/subtitles'
 import { LanguagePicker } from './LanguagePicker'
 import { RealDebridCard } from './RealDebridCard'
+import { StremioAddonCard } from './StremioAddonCard'
+import { pickAddonBase } from '../lib/stremioAddon'
 import { SubtitlePreview } from './SubtitlePreview'
 import { useOwnRelay } from './useOwnRelay'
 import { Badge, Button, Card, Chips, colors, styles } from './ui'
@@ -239,6 +241,12 @@ export function SettingsModal({ visible, settings, onChange, onClose, diagnostic
           </Card>
 
           <RealDebridCard rdAuth={settings.rdAuth} onChange={(rdAuth) => onChange({ rdAuth })} />
+
+          <StremioAddonCard
+            relayUrl={settings.relayUrl}
+            base={pickAddonBase({ detected: settings.detectedAddon, added: settings.streamAddons })}
+            onAddAddon={(u) => onChange({ streamAddons: [...new Set([...settings.streamAddons, u])] })}
+          />
 
           <Card title={t.relay}>
             <Text style={styles.muted}>{t.relayHint}</Text>
