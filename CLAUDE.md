@@ -11,7 +11,7 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   `modules/intent-extras/` is a local Expo module (Kotlin) that exposes Android intent extras (Stremio "external player" → subtitles).
 - `worker/`: Cloudflare Worker "stremcastio-relay". Converts SRT/ASS → WebVTT with CORS so the Chromecast shows subtitles.
   KV namespace `subcast-subs` (id in wrangler.toml) is already created in Guus's Cloudflare account.
-- `.github/workflows/`: android.yml (APK, works), ios.yml (unsigned IPA), relay.yml (tests + deploy).
+- `.github/workflows/`: android.yml (APK, works), ios.yml (unsigned IPA, manual only: runners never start), relay.yml (tests + deploy).
 - `codemagic.yaml`: iOS build fallback. **Works**: build #1 produced StremCastio.ipa.
 
 ## Checks
