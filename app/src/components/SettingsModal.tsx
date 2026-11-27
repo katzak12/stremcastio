@@ -258,7 +258,7 @@ export function SettingsModal({ visible, settings, onChange, onClose, diagnostic
               {relayState === 'ok' && <Text style={{ color: colors.ok }}>✓ {t.relayOk}</Text>}
               {relayState === 'fail' && <Text style={{ color: colors.danger }}>✕ {t.relayFail}</Text>}
             </View>
-            <Button label={`☁︎  ${t.ownRelay}`} onPress={openDeploy} />
+            <Button label={t.ownRelay} onPress={openDeploy} />
             <Text style={[styles.muted, { fontSize: 12 }]}>{t.ownRelayHint}</Text>
           </Card>
 
