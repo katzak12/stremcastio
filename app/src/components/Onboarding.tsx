@@ -17,7 +17,7 @@ type Props = {
   onDone: () => void
 }
 
-const STEPS = 3
+const STEPS = 4
 
 export function Onboarding({ visible, settings, onChange, onDone }: Props) {
   const [step, setStep] = useState(0)
@@ -55,6 +55,20 @@ export function Onboarding({ visible, settings, onChange, onDone }: Props) {
 
           {step === 1 && (
             <>
+              <Title text={t.introNeedTitle} />
+              {[t.introNeedStremio, t.introNeedWifi, Platform.OS === 'ios' ? t.introNeedLocalNetwork : null, t.introNeedRd]
+                .filter((x): x is string => !!x)
+                .map((line) => (
+                  <View key={line} style={[styles.row, { alignItems: 'flex-start', gap: 10 }]}>
+                    <Text style={{ color: colors.accent, fontSize: 16, lineHeight: 23 }}>•</Text>
+                    <Text style={[styles.muted, { flex: 1, fontSize: 16, lineHeight: 23 }]}>{line}</Text>
+                  </View>
+                ))}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
               <Title text={t.introLangTitle} />
               <Body text={t.introLang} />
               <Text style={styles.label}>{t.appLanguage}</Text>
@@ -82,7 +96,7 @@ export function Onboarding({ visible, settings, onChange, onDone }: Props) {
             </>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <>
               <Title text={t.introHowTitle} />
               <Body text={Platform.OS === 'android' ? t.howToAndroid : t.howToIos} />

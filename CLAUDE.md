@@ -147,6 +147,9 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   that would need a patch, /health reports media:false. /vtt responses are cached (Cache API). Other audio tracks /
   TrueHD go via the viewer's Real-Debrid; without RD, the app only lists tracks it can deliver (default or with a URL).
   Own relay stays optional (Settings), can set MEDIA_PROXY=on. Deployed to Guus's worker 2026-11-27.
+- 0.5.2: intro is 4 steps: welcome, "What you need" (Stremio + Torrentio + debrid, same Wi-Fi, iOS Local Network
+  permission = "Allow" or the TV is never found, Real-Debrid makes languages/TrueHD work), languages, how to use.
+  INSTALL.md (NL+EN) got the same "What you need" section.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap
