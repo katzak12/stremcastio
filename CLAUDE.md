@@ -116,6 +116,9 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   Cloudflare" button (README + Settings → Relay, `lib/relaySetup.ts`, deploys `worker/` from this repo; Cloudflare
   provisions the KV itself). When the app becomes active after that and the clipboard holds a *.workers.dev address
   that answers /health, it offers to use it.
+- 0.3.3: first-run introduction (`components/Onboarding.tsx`, `settings.onboarded`): 5 steps (welcome, languages,
+  relay: standard or own via `useOwnRelay` hook shared with Settings, optional stream add-on, how to use). Skippable;
+  Settings → How to use → "Show introduction" sets onboarded=false to show it again.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap

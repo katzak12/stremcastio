@@ -25,6 +25,8 @@ export type Settings = {
   autoNext: boolean
   /** Last spoken language picked from a file's audio tracks (2-letter key); '' = what the file plays by default. */
   audioLanguage: string
+  /** The introduction (first-run setup) has been seen. */
+  onboarded: boolean
 }
 
 const KEY = 'stremcastio.settings.v1'
@@ -46,6 +48,7 @@ export function defaultSettings(): Settings {
     streamAddons: [],
     autoNext: true,
     audioLanguage: '',
+    onboarded: false,
   }
 }
 
