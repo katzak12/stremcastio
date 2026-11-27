@@ -1,18 +1,16 @@
-import * as Clipboard from 'expo-clipboard'
 import Constants from 'expo-constants'
-import * as Linking from 'expo-linking'
-import { useEffect, useRef, useState } from 'react'
-import { Alert, AppState, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native'
+import { useState } from 'react'
+import { Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { APP_LANGUAGES, t } from '../lib/i18n'
 import { englishName, LANGUAGE_CHOICES, langName } from '../lib/languages'
 import { STANDARD_LOOK, type SubtitleBackground, type SubtitleColor, type SubtitleEdge, type SubtitleFont } from '../lib/cast'
 import { pingRelay } from '../lib/relay'
-import { DEPLOY_RELAY_URL, findWorkerUrl } from '../lib/relaySetup'
 import { lookFromSettings, lookToSettings, type Settings } from '../lib/settings'
 import { addonBase } from '../lib/subtitles'
 import { LanguagePicker } from './LanguagePicker'
 import { SubtitlePreview } from './SubtitlePreview'
+import { useOwnRelay } from './useOwnRelay'
 import { Badge, Button, Card, Chips, colors, styles } from './ui'
 
 type Props = {
@@ -31,38 +29,11 @@ export function SettingsModal({ visible, settings, onChange, onClose, diagnostic
   const [relayState, setRelayState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [picker, setPicker] = useState<'app' | 'subs' | null>(null)
 
-  // Own relay: open Cloudflare's deploy page; when the user comes back with the address copied, offer it.
-  const awaitingDeploy = useRef(false)
-  const openDeploy = () => {
-    awaitingDeploy.current = true
-    Linking.openURL(DEPLOY_RELAY_URL).catch(() => {})
-  }
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', async (state) => {
-      if (state !== 'active' || !awaitingDeploy.current) return
-      try {
-        if (!(await Clipboard.hasStringAsync())) return
-        const found = findWorkerUrl(await Clipboard.getStringAsync())
-        if (!found || found === settings.relayUrl) return
-        if (!(await pingRelay(found))) return
-        awaitingDeploy.current = false
-        Alert.alert(t.relayFound, `${found}\n\n${t.useThisRelay}`, [
-          { text: t.cancel, style: 'cancel' },
-          {
-            text: t.done,
-            onPress: () => {
-              setRelayInput(found)
-              onChange({ relayUrl: found })
-              setRelayState('ok')
-            },
-          },
-        ])
-      } catch {
-        // clipboard not available
-      }
-    })
-    return () => sub.remove()
-  }, [settings.relayUrl, onChange])
+  const openDeploy = useOwnRelay(settings.relayUrl, (found) => {
+    setRelayInput(found)
+    onChange({ relayUrl: found })
+    setRelayState('ok')
+  })
 
   const saveRelay = async () => {
     const value = relayInput.trim().replace(/\/+$/, '')
@@ -290,6 +261,7 @@ export function SettingsModal({ visible, settings, onChange, onClose, diagnostic
 
           <Card title={t.howTo}>
             <Text style={styles.muted}>{Platform.OS === 'android' ? t.howToAndroid : t.howToIos}</Text>
+            <Button label={t.showIntro} small onPress={() => onChange({ onboarded: false })} />
           </Card>
 
           <Card title="Info">

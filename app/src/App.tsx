@@ -16,6 +16,7 @@ import GoogleCast, {
   useStreamPosition,
 } from 'react-native-google-cast'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
+import { Onboarding } from './components/Onboarding'
 import { SettingsModal } from './components/SettingsModal'
 import { Badge, Button, Card, Chips, colors, styles } from './components/ui'
 import { audioTrackLabel, chooseAudioTrack, fetchAudioTracks, type FileAudioTrack } from './lib/audioTracks'
@@ -1237,8 +1238,9 @@ function Main() {
         </View>
       )}
 
+      <Onboarding visible={!settings.onboarded} settings={settings} onChange={update} onDone={() => update({ onboarded: true })} />
       <SettingsModal
-        visible={showSettings}
+        visible={showSettings && settings.onboarded}
         settings={settings}
         onChange={update}
         onClose={() => setShowSettings(false)}
