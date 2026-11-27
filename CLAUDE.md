@@ -114,6 +114,9 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   Guus dislikes unrequested layout changes: change only what he asks.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
+## Roadmap
+- Planned features are in `ROADMAP.md` (Dutch, for Guus). Add new wishes there when he asks ("zet op de updatelijst").
+
 ## Conventions
 - Never put passwords or tokens in chat or code; Guus enters credentials himself.
 - Commit trailers: Co-Authored-By: Claude.

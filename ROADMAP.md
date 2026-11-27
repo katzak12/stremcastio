@@ -1,0 +1,12 @@
+# StremCastio: updatelijst
+
+Wensen voor latere versies. Bovenaan = eerst.
+
+## Gepland
+
+- **Eigen relay per gebruiker ("koppel je Cloudflare-account")**
+  Een "Deploy to Cloudflare"-knop in de README en in de app (Instellingen → Relay). De gebruiker logt in bij
+  Cloudflare, klikt op Deploy en krijgt de relay in zijn eigen (gratis) account. Daarna komt het relay-adres in de
+  app; het mooist als de app dat adres zelf herkent en invult. Zo gaat niemands film via jouw account.
+  Geen tokens in de app: een "inloggen met Cloudflare" voor gewone apps bestaat niet, en tokens laten plakken is
+  onhandig en minder veilig.
