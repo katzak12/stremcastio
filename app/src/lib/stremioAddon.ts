@@ -29,7 +29,8 @@ export function pickAddonBase(opts: { detected?: string | null; streamUrl?: stri
   return /^https:\/\//i.test(base) ? base : null
 }
 
-export function addonInstallUrls(relayUrl: string, base: string): { manifest: string; stremio: string } {
-  const manifest = `${relayUrl.trim().replace(/\/+$/, '')}/stremio/${base64Url(base)}/manifest.json`
+/** The add-on is the same for everyone: no configuration in the link. */
+export function addonInstallUrls(relayUrl: string): { manifest: string; stremio: string } {
+  const manifest = `${relayUrl.trim().replace(/\/+$/, '')}/stremio/manifest.json`
   return { manifest, stremio: manifest.replace(/^https?:\/\//i, 'stremio://') }
 }

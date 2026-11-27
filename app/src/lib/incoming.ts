@@ -9,7 +9,10 @@ import { extractUrl, parseM3u } from './stream'
 import { subtitlesFromExtras, type SubtitleOption } from './subtitles'
 
 export type Incoming = {
+  /** Empty for a pick request. */
   streamUrl: string
+  /** From the Stremio "Cast to TV" entry: a title to find streams for (stremcastio://pick?type=&id=). */
+  pick?: { type: 'movie' | 'series'; id: string }
   title?: string
   subtitles: SubtitleOption[]
 }
@@ -29,6 +32,10 @@ export async function fromUrl(raw: string | null | undefined): Promise<Incoming 
   if (/^stremcastio:/i.test(raw)) {
     const parsed = Linking.parse(raw)
     const q = parsed.queryParams ?? {}
+    const type = q.type === 'movie' || q.type === 'series' ? q.type : null
+    if (type && typeof q.id === 'string' && /^tt\d+(?::\d+:\d+)?$/.test(q.id)) {
+      return { streamUrl: '', pick: { type, id: q.id }, subtitles: [] }
+    }
     const url = typeof q.url === 'string' ? q.url : null
     if (!url) return null
     const sub = typeof q.sub === 'string' ? q.sub : null
@@ -80,9 +87,10 @@ export function useIncoming(onIncoming: (incoming: Incoming) => void) {
       if (!inc) return
       // Android fires both the intent and Linking for the same VIEW action; keep the richer one.
       const now = Date.now()
-      const dup = last.current?.url === inc.streamUrl && now - last.current.at < 3000
+      const key = inc.pick ? `pick:${inc.pick.id}` : inc.streamUrl
+      const dup = last.current?.url === key && now - last.current.at < 3000
       if (dup && inc.subtitles.length === 0) return
-      last.current = { url: inc.streamUrl, at: now }
+      last.current = { url: key, at: now }
       cb.current(inc)
     }
 

@@ -16,9 +16,9 @@ test('pickAddonBase prefers the add-on seen in the stream link', () => {
   assert.equal(pickAddonBase({ added: [] }), null)
 })
 
-test('addonInstallUrls builds https and stremio:// links', () => {
-  const u = addonInstallUrls('https://relay.dev/', 'https://torrentio.strem.fun/realdebrid=K')
-  assert.match(u.manifest, /^https:\/\/relay\.dev\/stremio\/[A-Za-z0-9_-]+\/manifest\.json$/)
+test('addonInstallUrls is the same for everyone', () => {
+  const u = addonInstallUrls('https://relay.dev/')
+  assert.equal(u.manifest, 'https://relay.dev/stremio/manifest.json')
   assert.equal(u.stremio, u.manifest.replace('https://', 'stremio://'))
 })
 
@@ -28,4 +28,16 @@ test('compareVersions', () => {
   assert.equal(compareVersions('v0.5.2', '0.5.2'), 0)
   assert.equal(compareVersions('0.10.0', '0.9.9'), 1)
   assert.equal(compareVersions('0.5', '0.5.1'), -1)
+})
+
+import { rankStreams } from '../src/lib/streams'
+test('rankStreams: cached first, then add-on order; silent audio down without Real-Debrid', () => {
+  const streams = [
+    { url: 'https://a/1', name: 'Torrentio\n[RD download] 4k', title: 'A.2160p.TrueHD.mkv' },
+    { url: 'https://a/2', name: 'Torrentio\n[RD+] 4k', title: 'B.2160p.TrueHD.mkv' },
+    { url: 'https://a/3', name: 'Torrentio\n[RD+] 1080p', title: 'C.1080p.DDP5.1.mkv' },
+    { name: 'no url' },
+  ]
+  assert.deepEqual(rankStreams(streams, { canFixAudio: true }).map((c) => c.url), ['https://a/2', 'https://a/3', 'https://a/1'])
+  assert.deepEqual(rankStreams(streams, { canFixAudio: false }).map((c) => c.url), ['https://a/3', 'https://a/2', 'https://a/1'])
 })

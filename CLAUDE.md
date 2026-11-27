@@ -159,6 +159,12 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   requests from Cloudflare Workers. (2) Clipboard banner: on app start/foreground, iOS `hasUrlAsync` (no paste
   prompt) → card with the native paste button. (3) Update banner: `lib/updates.ts` checks GitHub latest release
   every 12 h, compares with expoConfig.version. Items 4/5 (report button, per-series subtitle memory) in ROADMAP.md.
+- 0.6.1 (made the 0.6.0 add-on robust): the add-on no longer fetches Torrentio server-side (Torrentio may block
+  Cloudflare IPs) and needs no config: /stremio/manifest.json, /stremio/stream/{type}/{id}.json returns one entry with
+  externalUrl https://<relay>/open?type&id (Stremio can always open https; a custom scheme maybe not on iOS); /open is
+  a page redirecting to stremcastio://pick?type&id with a button fallback. Old /stremio/{cfg}/… links still work.
+  App: incoming `pick` → `listStreams` (streams.ts, from the phone via the user's add-on: streamAddons + detectedAddon;
+  `rankStreams`: debrid-cached first, add-on order, TrueHD/DTS down unless RD) → "Choose a stream" sheet → acceptStream.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap

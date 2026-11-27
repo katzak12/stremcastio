@@ -1,63 +1,25 @@
-// "Cast with StremCastio" inside Stremio: a tiny Stremio add-on. The user's own Torrentio configuration
-// (including their debrid key) is part of the install URL, so nothing is stored here:
-//   GET /stremio/{cfg}/manifest.json
-//   GET /stremio/{cfg}/stream/{type}/{id}.json
-// {cfg} = base64url of the user's Torrentio base (e.g. https://torrentio.strem.fun/realdebrid=KEY).
-// Each Torrentio stream comes back as a stream whose externalUrl opens the app with that link:
-// stremcastio://cast?url=…  — tap it in Stremio and StremCastio opens, ready to cast.
-
-const MAX_STREAMS = 20
-const CACHE_SECONDS = 600
+// "Cast to TV" inside Stremio: a tiny Stremio add-on that adds one entry per film/episode. Tapping it opens
+// https://<relay>/open?type=…&id=…, a page that hands the title to the app (stremcastio://pick?…); the phone then
+// asks the user's own stream add-on (Torrentio) for streams. So this relay never talks to Torrentio, never sees a
+// debrid key, and the install link is the same for everyone:
+//   GET /stremio/manifest.json
+//   GET /stremio/stream/{movie|series}/{id}.json
+//   GET /open?type=…&id=…
+// Older install links with a config segment (/stremio/{cfg}/…) still work; the segment is ignored.
 
 export const MANIFEST = {
   id: 'community.stremcastio',
-  version: '1.0.0',
+  version: '2.0.0',
   name: 'StremCastio',
-  description: 'Adds "Cast to TV" to every stream: opens StremCastio, which casts it to your Chromecast with subtitles.',
+  description: 'Adds "Cast to TV" to every film and episode: opens StremCastio, which casts it to your Chromecast with subtitles.',
   resources: ['stream'],
   types: ['movie', 'series'],
   idPrefixes: ['tt'],
   catalogs: [],
 }
 
-export function encodeCfg(base: string): string {
-  const bytes = new TextEncoder().encode(base)
-  let bin = ''
-  for (const b of bytes) bin += String.fromCharCode(b)
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-export function decodeCfg(cfg: string): string | null {
-  try {
-    const b64 = cfg.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (cfg.length % 4)) % 4)
-    const bin = atob(b64)
-    const base = new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))).replace(/\/manifest\.json$/, '').replace(/\/+$/, '')
-    const u = new URL(base)
-    return u.protocol === 'https:' ? base : null
-  } catch {
-    return null
-  }
-}
-
-type AddonStream = { url?: string; name?: string; title?: string; behaviorHints?: { filename?: string } }
-
-export function toCastStreams(streams: AddonStream[]): { name: string; title: string; externalUrl: string }[] {
-  return streams
-    .filter((s) => typeof s.url === 'string' && /^https?:\/\//i.test(s.url))
-    .slice(0, MAX_STREAMS)
-    .map((s) => {
-      const filename = s.behaviorHints?.filename ?? (s.title ?? '').split('\n')[0]
-      const params = new URLSearchParams({ url: s.url! })
-      if (filename) params.set('title', filename)
-      return {
-        name: `StremCastio\n${(s.name ?? '').replace(/\s*\n\s*/g, ' ')}`.trim(),
-        title: `Cast to TV\n${s.title ?? filename}`,
-        externalUrl: `stremcastio://cast?${params}`,
-      }
-    })
-}
-
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
+const ID = /^tt\d+(?::\d+:\d+)?$/
 
 function json(data: unknown, status = 200, cacheSeconds = 0): Response {
   return new Response(JSON.stringify(data), {
@@ -70,29 +32,41 @@ function json(data: unknown, status = 200, cacheSeconds = 0): Response {
   })
 }
 
-/** Handles /stremio/…; returns null for other paths. */
-export async function handleStremio(req: Request, url: URL, ctx?: ExecutionContext): Promise<Response | null> {
-  const m = /^\/stremio\/([A-Za-z0-9_-]+)\/(manifest\.json|stream\/(movie|series)\/([^/]+)\.json)$/.exec(url.pathname)
-  if (!m) return url.pathname.startsWith('/stremio') ? json({ error: 'Not found' }, 404) : null
-  const base = decodeCfg(m[1])
-  if (!base) return json({ error: 'Invalid configuration' }, 400)
-  if (m[2] === 'manifest.json') return json(MANIFEST, 200, 86400)
+export function appLink(type: string, id: string): string {
+  return `stremcastio://pick?${new URLSearchParams({ type, id })}`
+}
 
-  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default
-  if (cache) {
-    const hit = await cache.match(req)
-    if (hit) return hit
-  }
-  const type = m[3]
-  const id = decodeURIComponent(m[4])
-  let streams: AddonStream[] = []
-  try {
-    const res = await fetch(`${base}/stream/${type}/${encodeURIComponent(id)}.json`, { headers: { 'User-Agent': 'StremCastio/1.0' } })
-    if (res.ok) streams = ((await res.json()) as { streams?: AddonStream[] }).streams ?? []
-  } catch {
-    // no streams
-  }
-  const out = json({ streams: toCastStreams(streams) }, 200, CACHE_SECONDS)
-  if (cache && streams.length) ctx?.waitUntil(cache.put(req, out.clone()))
-  return out
+/** Handles /stremio/… ; null for other paths. */
+export function handleStremio(url: URL): Response | null {
+  if (!url.pathname.startsWith('/stremio')) return null
+  const m = /^\/stremio(?:\/[A-Za-z0-9_-]+)?\/(manifest\.json|stream\/(movie|series)\/([^/]+)\.json)$/.exec(url.pathname)
+  if (!m) return json({ error: 'Not found' }, 404)
+  if (m[1] === 'manifest.json') return json(MANIFEST, 200, 86400)
+  const type = m[2]
+  const id = decodeURIComponent(m[3])
+  if (!ID.test(id)) return json({ streams: [] }, 200, 86400)
+  const open = `${url.origin}/open?${new URLSearchParams({ type, id })}`
+  return json(
+    { streams: [{ name: 'StremCastio', title: 'Cast to TV', externalUrl: open }] },
+    200,
+    86400,
+  )
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+}
+
+/** /open: a web page (Stremio can always open https) that sends the browser on to the app. */
+export function handleOpen(url: URL): Response {
+  const type = url.searchParams.get('type') ?? ''
+  const id = url.searchParams.get('id') ?? ''
+  if (!/^(movie|series)$/.test(type) || !ID.test(id)) return new Response('Bad request', { status: 400 })
+  const link = escapeHtml(appLink(type, id))
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StremCastio</title><meta http-equiv="refresh" content="0;url=${link}">
+<style>body{background:#0E1015;color:#F2F3F7;font-family:-apple-system,system-ui,sans-serif;display:flex;min-height:90vh;align-items:center;justify-content:center;text-align:center}a{display:inline-block;margin-top:16px;padding:14px 28px;border-radius:14px;background:#7B61FF;color:#fff;text-decoration:none;font-weight:700}</style>
+</head><body><div><div>Opening StremCastio…</div><a href="${link}">Open StremCastio</a></div>
+<script>location.href=${JSON.stringify(appLink(type, id))}</script></body></html>`
+  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=86400' } })
 }
