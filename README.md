@@ -59,6 +59,17 @@ You can also open `stremcastio://cast?url=<stream>&sub=<subtitle>` from Shortcut
 
 ## Running the relay (one time, free)
 
+**Quickest: your own relay with one click.** Every user can run their own free relay, so nobody's films go
+through someone else's account:
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/katzak12/stremcastio/tree/main/worker)
+
+Log in, tap **Deploy** (Cloudflare copies `worker/` to your GitHub, creates the storage it needs and deploys it),
+then copy the address ending in `.workers.dev`. In the app, the same button is under **Settings → Relay**; when you
+come back with the address copied, the app checks it and fills it in.
+
+**Or, as the publisher, one relay for everyone:**
+
 Whoever publishes the app deploys one relay, and every user then uses it
 automatically.
 
