@@ -17,6 +17,7 @@ import GoogleCast, {
 } from 'react-native-google-cast'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { Onboarding } from './components/Onboarding'
+import { useOwnRelay } from './components/useOwnRelay'
 import { SettingsModal } from './components/SettingsModal'
 import { Badge, Button, Card, Chips, colors, styles } from './components/ui'
 import { audioTrackLabel, chooseAudioTrack, fetchAudioTracks, type FileAudioTrack } from './lib/audioTracks'
@@ -274,6 +275,7 @@ function Main() {
   )
 
   const look: SubtitleLook | null = settings ? lookFromSettings(settings) : null
+  const openDeploy = useOwnRelay(settings?.relayUrl ?? '', (url) => update({ relayUrl: url }))
 
   // ---------- Real-Debrid streaming (other spoken language, or audio the TV can't play) ----------
 
@@ -900,6 +902,14 @@ function Main() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
+        {!settings.relayUrl && settings.onboarded && (
+          <Card title={t.relay}>
+            <Text style={styles.muted}>{t.relayNeeded}</Text>
+            <Button label={t.ownRelay} kind="primary" onPress={openDeploy} />
+            <Text style={[styles.muted, { fontSize: 12 }]}>{t.ownRelayHint}</Text>
+          </Card>
+        )}
+
         {/* ---------- video ---------- */}
         <Card title={t.videoTitle}>
           {stream ? (

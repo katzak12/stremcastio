@@ -57,37 +57,20 @@ Step-by-step instructions (Dutch and English): [INSTALL.md](INSTALL.md).
 
 You can also open `stremcastio://cast?url=<stream>&sub=<subtitle>` from Shortcuts or other apps.
 
-## Running the relay (one time, free)
+## Your relay (one time, free, about 3 minutes)
 
-**Quickest: your own relay with one click.** Every user can run their own free relay, so nobody's films go
-through someone else's account:
+Subtitles need a small converter, the relay. Every user runs their own, free, so nobody depends on someone
+else's server and no shared server has to carry everyone. The app's introduction walks you through it:
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/katzak12/stremcastio/tree/main/worker)
 
-Log in, tap **Deploy** (Cloudflare copies `worker/` to your GitHub, creates the storage it needs and deploys it),
-then copy the address ending in `.workers.dev`. In the app, the same button is under **Settings → Relay**; when you
-come back with the address copied, the app checks it and fills it in.
+Log in (a free Cloudflare and GitHub account), tap **Deploy** (Cloudflare copies `worker/` to your GitHub,
+creates the storage it needs and deploys it), then copy the address ending in `.workers.dev` and go back to the
+app: it checks the address and fills it in. The same button is under **Settings → Relay**. Without a relay you can
+still cast, just without subtitles.
 
-**Or, as the publisher, one relay for everyone:**
-
-Whoever publishes the app deploys one relay, and every user then uses it
-automatically.
-
-1. Create a free Cloudflare account.
-2. In GitHub → *Settings → Secrets and variables → Actions*, add:
-   - secret `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers")
-   - secret `CLOUDFLARE_ACCOUNT_ID`
-3. Push to `main`. The *Subtitle relay* workflow tests and deploys `worker/`.
-4. Copy the Worker URL (e.g. `https://stremcastio-relay.<you>.workers.dev`) into
-   the repository **variable** `RELAY_URL`. App builds then use it as the default.
-
-Optional: to support subtitle *files* stored on the phone (not just links),
-create a KV namespace (`npx wrangler kv namespace create SUBS`) and add it in
-`worker/wrangler.toml`.
-
-The free tier allows 100,000 requests a day. Each film needs about one request.
-
-Users can point the app at their own relay in **Settings**.
+The free tier allows 100,000 requests a day; one person needs a few per film. Choosing another spoken language
+uses Real-Debrid when available, so films normally don't pass through the relay.
 
 ## Build it yourself
 

@@ -9,6 +9,7 @@ import { LANGUAGE_CHOICES, langName } from '../lib/languages'
 import type { Settings } from '../lib/settings'
 import { LanguagePicker } from './LanguagePicker'
 import { Badge, Button, Chips, colors, styles } from './ui'
+import { useOwnRelay } from './useOwnRelay'
 
 type Props = {
   visible: boolean
@@ -17,11 +18,12 @@ type Props = {
   onDone: () => void
 }
 
-const STEPS = 3
+const STEPS = 4
 
 export function Onboarding({ visible, settings, onChange, onDone }: Props) {
   const [step, setStep] = useState(0)
   const [pickingLang, setPickingLang] = useState(false)
+  const openDeploy = useOwnRelay(settings.relayUrl, (url) => onChange({ relayUrl: url }))
 
   const finish = () => {
     setStep(0)
@@ -83,6 +85,23 @@ export function Onboarding({ visible, settings, onChange, onDone }: Props) {
           )}
 
           {step === 2 && (
+            <>
+              <Title text={t.introRelayTitle} />
+              <Body text={t.introRelay} />
+              {settings.relayUrl ? (
+                <Text style={{ color: colors.ok, textAlign: 'center' }}>
+                  ✓ {t.relayReady}
+                </Text>
+              ) : (
+                <>
+                  <Button label={t.ownRelay} kind="primary" onPress={openDeploy} />
+                  <Text style={[styles.muted, { fontSize: 13, textAlign: 'center' }]}>{t.ownRelayHint}</Text>
+                </>
+              )}
+            </>
+          )}
+
+          {step === 3 && (
             <>
               <Title text={t.introHowTitle} />
               <Body text={Platform.OS === 'android' ? t.howToAndroid : t.howToIos} />
