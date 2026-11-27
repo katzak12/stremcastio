@@ -43,11 +43,17 @@ https://github.com/katzak12/stremcastio/releases/latest/download/altstore-source
 1. Open op je telefoon de [nieuwste release](https://github.com/katzak12/stremcastio/releases/latest) en download **StremCastio.apk**.
 2. Open het bestand en sta "installeren uit onbekende bronnen" toe.
 
+### Wat je nodig hebt
+
+- **Stremio** met de **Torrentio**-add-on en een **debrid-dienst** (Real-Debrid aangeraden), ingesteld in Torrentio. Zonder debrid draait een stream op je telefoon en kan de tv er niet bij.
+- Je telefoon op **hetzelfde wifi** als de Chromecast of Google TV.
+- iPhone: tik **Sta toe** als StremCastio vraagt om apparaten op je lokale netwerk te zoeken. Per ongeluk geweigerd? *Instellingen → StremCastio → Lokaal netwerk* aanzetten.
+
 ### Gebruiken
 
 - **iPhone:** houd in Stremio een stream ingedrukt → *Streamlink kopiëren* → open StremCastio → tik op de cast-knop.
 - **Android:** Stremio → *Instellingen → Speler → Externe speler* → "Laat Android kiezen", en kies StremCastio bij het starten van een stream.
-- Tip: kies streams met **DD5.1** of **DDP5.1** in de naam. **DTS** en **TrueHD** speelt een Chromecast niet af (geen geluid).
+- Andere gesproken taal of geluid in DTS/TrueHD: dat regelt de app via je Real-Debrid (met een Torrentio-link vanzelf). Zonder Real-Debrid: kies streams met **DD5.1** of **DDP5.1** in de naam.
 
 ---
 
@@ -82,8 +88,14 @@ https://github.com/katzak12/stremcastio/releases/latest/download/altstore-source
 1. On your phone, open the [latest release](https://github.com/katzak12/stremcastio/releases/latest) and download **StremCastio.apk**.
 2. Open it and allow installing from unknown sources.
 
+### What you need
+
+- **Stremio** with the **Torrentio** add-on and a **debrid service** (Real-Debrid recommended) set up in Torrentio. Without debrid a stream runs on your phone and the TV can't reach it.
+- Your phone on the **same Wi-Fi** as the Chromecast or Google TV.
+- iPhone: tap **Allow** when StremCastio asks to find devices on your local network. Declined by accident? Turn on *Settings → StremCastio → Local Network*.
+
 ### Using it
 
 - **iPhone:** in Stremio, long-press a stream → *Copy stream link* → open StremCastio → tap the cast button.
 - **Android:** Stremio → *Settings → Player → External player* → "Let Android choose", then pick StremCastio when you start a stream.
-- Tip: pick streams with **DD5.1** or **DDP5.1** in the name. A Chromecast can't play **DTS** or **TrueHD** (no sound).
+- Another spoken language, or DTS/TrueHD sound: the app handles it through your Real-Debrid (automatic with a Torrentio link). Without Real-Debrid, pick streams with **DD5.1** or **DDP5.1** in the name.
