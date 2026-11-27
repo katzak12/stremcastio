@@ -104,3 +104,6 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
 ## Conventions
 - Never put passwords or tokens in chat or code; Guus enters credentials himself.
 - Commit trailers: Co-Authored-By: Claude.
+- Guus allows Claude to merge its own PRs into main without asking (said 2026-11-27), then release:
+  run android.yml manually on main with `release_tag` = v<version> (creates the tag/release + APK); Guus starts the
+  Codemagic "iOS release" build for that tag himself.
