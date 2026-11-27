@@ -93,6 +93,7 @@ function Main() {
   const device = useCastDevice()
   const mediaStatus = useMediaStatus()
   const connected = castState === CastState.CONNECTED && client != null
+  const activeIds = mediaStatus?.activeTrackIds ?? []
 
   // Audio tracks inside the file (MKV), read via the relay. The chosen track decides what we cast.
   const [fileAudio, setFileAudio] = useState<{ url: string; loading: boolean; tracks: FileAudioTrack[] }>({ url: '', loading: false, tracks: [] })
@@ -157,10 +158,8 @@ function Main() {
     preparedFor.current = null
   }, [])
 
-  // Forget "we cast this" when the connection ends or the TV stops/finishes the video.
-  useEffect(() => {
-    if (!connected) setWeCast(null)
-  }, [connected])
+  // Forget "we cast this" when the TV stops or finishes the video. Not on a dropped connection: that also
+  // happens for a moment when the app comes back from the background.
   const tvIdleReason = mediaStatus?.idleReason
   const tvPlayerState = mediaStatus?.playerState
   useEffect(() => {
@@ -489,7 +488,7 @@ function Main() {
         : null
       : unsupportedAudio(stream.filename)
 
-  // Picking another audio track while it plays: cast again at the same position.
+  // Picking another audio track or subtitle while it plays: cast again at the same position.
   const reloadForAudio = useRef(false)
   const pickAudio = (num: number) => {
     const track = audioTracksForStream.find((tr) => tr.number === num)
@@ -505,7 +504,24 @@ function Main() {
       .getStreamPosition()
       .then((pos) => loadOnTv(pos ?? 0))
       .catch(() => {})
-  }, [castUrl, client, loadOnTv])
+  }, [castUrl, selectedKey, client, loadOnTv])
+
+  const pickSubtitle = (key: string) => {
+    if (key === NONE) {
+      // Just hide them on the TV; no reload needed.
+      setSelectedKey(NONE)
+      const others = activeIds.filter((x) => x !== SUBTITLE_TRACK_ID)
+      client?.setActiveTrackIds(others).catch(() => {})
+      return
+    }
+    if (key === selectedKey && activeIds.includes(SUBTITLE_TRACK_ID)) return
+    if (key === selectedKey) {
+      client?.setActiveTrackIds([SUBTITLE_TRACK_ID, ...activeIds]).catch(() => {})
+      return
+    }
+    setSelectedKey(key)
+    reloadForAudio.current = isPlayingOurs
+  }
 
   const findDolbyVersion = async () => {
     if (!stream || !settings) return
@@ -682,7 +698,6 @@ function Main() {
   // Only offered when the TV reports more than one audio track (HLS/DASH streams usually do;
   // most single-file MKV/MP4 streams do not, and then this simply stays hidden).
   const audioTracks = (mediaStatus?.mediaInfo?.mediaTracks ?? []).filter((tr) => tr.type === 'audio')
-  const activeIds = mediaStatus?.activeTrackIds ?? []
   const activeAudio = audioTracks.find((tr) => activeIds.includes(tr.id))?.id ?? audioTracks[0]?.id
   const chooseAudio = (id: number) => {
     const audioIds = new Set(audioTracks.map((tr) => tr.id))
@@ -716,24 +731,50 @@ function Main() {
   // ---------- remote control (full screen while casting) ----------
 
   const [remoteOpen, setRemoteOpen] = useState(false)
-  const playingNow = !!stream && connected && isPlayingOurs
+  // Whatever the TV is playing (e.g. after the app was closed and reopened, when we no longer know the stream).
+  const tvMeta = mediaStatus?.mediaInfo?.metadata as { title?: string; images?: { url: string }[] } | undefined
+  const tvActive = connected && !!mediaStatus?.mediaInfo && playerState != null && playerState !== MediaPlayerState.IDLE
+  const playingNow = isPlayingOurs || tvActive
+  const nowTitle = isPlayingOurs ? (details?.name ?? stream?.title) : (tvMeta?.title ?? stream?.title ?? 'TV')
+  const nowPoster = isPlayingOurs ? details?.poster : tvMeta?.images?.[0]?.url
   const autoOpenedFor = useRef<string | null>(null)
   useEffect(() => {
     // Open the remote once per video, as soon as it starts on the TV.
-    if (playingNow && stream && autoOpenedFor.current !== stream.url) {
-      autoOpenedFor.current = stream.url
+    const key = stream?.url ?? tvContentUrl ?? null
+    if (playingNow && key && autoOpenedFor.current !== key) {
+      autoOpenedFor.current = key
       setRemoteOpen(true)
     }
     // Close it when playback has really ended (not during a quick reload for sync or audio).
     if (playingNow) return
     const timer = setTimeout(() => setRemoteOpen(false), 5000)
     return () => clearTimeout(timer)
-  }, [playingNow, stream])
+  }, [playingNow, stream, tvContentUrl])
 
   const subtitlesOn = activeIds.includes(SUBTITLE_TRACK_ID)
   const toggleSubtitles = () => {
     const others = activeIds.filter((x) => x !== SUBTITLE_TRACK_ID)
     client?.setActiveTrackIds(subtitlesOn ? others : [SUBTITLE_TRACK_ID, ...others]).catch(() => {})
+  }
+  /** Our own tap on the cast icon: the SDK's own sheet (volume slider, its own player) is not used. */
+  const onCastIconPress = () => {
+    if (!connected) {
+      GoogleCast.showCastDialog().catch(() => {})
+      return
+    }
+    Alert.alert(device?.friendlyName ?? 'TV', undefined, [
+      ...(playingNow ? [{ text: t.openRemote, onPress: () => setRemoteOpen(true) }] : []),
+      {
+        text: t.stopCasting,
+        style: 'destructive' as const,
+        onPress: () => {
+          GoogleCast.getSessionManager().endCurrentSession(true).catch(() => {})
+          setWeCast(null)
+          setRemoteOpen(false)
+        },
+      },
+      { text: t.cancel, style: 'cancel' as const },
+    ])
   }
   const playbackRate = mediaStatus?.playbackRate ?? 1
   const seekBy = (sec: number) => client?.seek({ position: sec, relative: true }).catch(() => {})
@@ -755,7 +796,7 @@ function Main() {
           <Text style={styles.muted}>{t.tagline}</Text>
         </View>
         <View style={styles.row}>
-          <CastButton style={{ width: ICON_SIZE, height: ICON_SIZE, tintColor: colors.text }} />
+          <CastIcon onPress={onCastIconPress} />
           <Pressable
             accessibilityLabel={t.settings}
             onPress={() => setShowSettings(true)}
@@ -896,7 +937,7 @@ function Main() {
         )}
 
         {/* ---------- full remote in a sheet; the bottom bar shows what plays ---------- */}
-        <Modal visible={remoteOpen && !!stream && connected} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setRemoteOpen(false)}>
+        <Modal visible={remoteOpen && connected && playingNow} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setRemoteOpen(false)}>
           <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
             <View style={[styles.row, { justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }]}>
               <Pressable accessibilityLabel={t.done} onPress={() => setRemoteOpen(false)} hitSlop={16}>
@@ -905,17 +946,15 @@ function Main() {
               <Text style={[styles.muted, { flex: 1, textAlign: 'center' }]} numberOfLines={1}>
                 {t.casting} {device?.friendlyName ?? 'TV'}
               </Text>
-              <CastButton style={{ width: ICON_SIZE, height: ICON_SIZE, tintColor: colors.text }} />
+              <CastIcon onPress={onCastIconPress} />
             </View>
             <ScrollView contentContainerStyle={{ padding: 20, gap: 22, paddingBottom: 60 }}>
               <View style={{ alignItems: 'center', gap: 8 }}>
-                {details?.poster ? (
-                  <Image source={{ uri: details.poster }} style={{ width: 150, height: 225, borderRadius: 12 }} />
-                ) : null}
+                {nowPoster ? <Image source={{ uri: nowPoster }} style={{ width: 150, height: 225, borderRadius: 12 }} /> : null}
                 <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800', textAlign: 'center' }} numberOfLines={2}>
-                  {details?.name ?? stream?.title}
+                  {nowTitle}
                 </Text>
-                {stream?.season !== undefined && stream?.episode !== undefined && (
+                {isPlayingOurs && stream?.season !== undefined && stream?.episode !== undefined && (
                   <Text style={styles.muted}>
                     S{String(stream.season).padStart(2, '0')}E{String(stream.episode).padStart(2, '0')}
                     {details?.episodeTitle ? ` · ${details.episodeTitle}` : ''}
@@ -943,20 +982,25 @@ function Main() {
                 <RoundButton label="+30" size={56} onPress={() => seekBy(30)} />
               </View>
 
-              {selected && (
+              {isPlayingOurs && (
                 <View style={{ gap: 8 }}>
                   <Text style={styles.muted}>{t.subtitlesTitle}</Text>
                   <Chips
                     options={[
-                      { value: 'on', label: t.on },
-                      { value: 'off', label: t.off },
+                      { value: NONE, label: t.off },
+                      ...visibleOptions.slice(0, 8).map((o) => {
+                        const what = o.source === 'stremio' ? t.fromStremio : o.label || o.source
+                        const short = what.length > 26 ? `${what.slice(0, 25)}…` : what
+                        return { value: o.key, label: `${o.lang === 'und' ? '?' : o.lang.toUpperCase()} · ${short}` }
+                      }),
                     ]}
-                    value={subtitlesOn ? 'on' : 'off'}
-                    onChange={(v) => (v === 'on') !== subtitlesOn && toggleSubtitles()}
+                    value={selected && subtitlesOn ? selected.key : NONE}
+                    onChange={pickSubtitle}
                   />
                 </View>
               )}
-              {selected && (
+
+              {isPlayingOurs && selected && subtitlesOn && (
                 <View style={{ gap: 8 }}>
                   <Text style={styles.muted}>
                     {t.syncTitle}: {offsetMs > 0 ? '+' : ''}
@@ -981,28 +1025,6 @@ function Main() {
                   />
                 </View>
               )}
-              <View style={{ gap: 8 }}>
-                <Text style={styles.muted}>
-                  {t.sleepTimer}
-                  {typeof sleep === 'number' && sleepEndsAt
-                    ? ` · ${t.stopsAt} ${new Date(sleepEndsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                    : sleep === 'end'
-                      ? ` · ${t.stopsAfterThis}`
-                      : ''}
-                </Text>
-                <Chips<SleepMode>
-                  options={[
-                    { value: 'off', label: t.off },
-                    { value: 'end', label: t.endOfVideo },
-                    { value: 15, label: '15 min' },
-                    { value: 30, label: '30 min' },
-                    { value: 60, label: '60 min' },
-                    { value: 90, label: '90 min' },
-                  ]}
-                  value={sleep}
-                  onChange={chooseSleep}
-                />
-              </View>
               {nextUp.status !== 'idle' && (
                 <View style={[styles.selectRow, { gap: 6 }]}>
                   <Text style={styles.cardTitle}>{t.upNext}</Text>
@@ -1020,7 +1042,7 @@ function Main() {
                   )}
                 </View>
               )}
-              {audioTracksForStream.length > 1 && chosenAudio && (
+              {isPlayingOurs && audioTracksForStream.length > 1 && chosenAudio && (
                 <View style={{ gap: 8 }}>
                   <Text style={styles.muted}>{t.audio}</Text>
                   <Chips
@@ -1044,6 +1066,29 @@ function Main() {
               </View>
 
               <Button label={`■  ${t.stop}`} onPress={() => client?.stop()} />
+
+              <View style={{ gap: 8 }}>
+                <Text style={styles.muted}>
+                  {t.sleepTimer}
+                  {typeof sleep === 'number' && sleepEndsAt
+                    ? ` · ${t.stopsAt} ${new Date(sleepEndsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    : sleep === 'end'
+                      ? ` · ${t.stopsAfterThis}`
+                      : ''}
+                </Text>
+                <Chips<SleepMode>
+                  options={[
+                    { value: 'off', label: t.off },
+                    { value: 'end', label: t.endOfVideo },
+                    { value: 15, label: '15 min' },
+                    { value: 30, label: '30 min' },
+                    { value: 60, label: '60 min' },
+                    { value: 90, label: '90 min' },
+                  ]}
+                  value={sleep}
+                  onChange={chooseSleep}
+                />
+              </View>
             </ScrollView>
           </SafeAreaView>
         </Modal>
@@ -1061,7 +1106,7 @@ function Main() {
         )}
       </ScrollView>
 
-      {playingNow && stream && (
+      {playingNow && (!stream || isPlayingOurs) && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t.openRemote}
@@ -1082,17 +1127,19 @@ function Main() {
             gap: 12,
           }}
         >
-          {details?.poster ? <Image source={{ uri: details.poster }} style={{ width: 40, height: 60, borderRadius: 6 }} /> : null}
+          {nowPoster ? <Image source={{ uri: nowPoster }} style={{ width: 40, height: 60, borderRadius: 6 }} /> : null}
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={{ color: colors.text, fontWeight: '700' }} numberOfLines={1}>
-              {details?.name ?? stream.title}
+              {nowTitle}
             </Text>
             <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
-              {chosenAudio ? `🔊 ${audioTrackLabel(chosenAudio)}` : `${t.casting} ${device?.friendlyName ?? 'TV'}`}
+              {isPlayingOurs && chosenAudio ? `🔊 ${audioTrackLabel(chosenAudio)}` : `${t.casting} ${device?.friendlyName ?? 'TV'}`}
             </Text>
-            <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
-              💬 {selected && subtitlesOn ? (selected.source === 'stremio' ? t.fromStremio : langName(selected.lang)) : t.off}
-            </Text>
+            {isPlayingOurs && (
+              <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
+                💬 {selected && subtitlesOn ? (selected.source === 'stremio' ? t.fromStremio : langName(selected.lang)) : t.off}
+              </Text>
+            )}
           </View>
           <Pressable
             accessibilityLabel={isPaused ? t.play : t.pause}
@@ -1105,7 +1152,7 @@ function Main() {
         </Pressable>
       )}
 
-      {stream && !playingNow && (
+      {stream && !isPlayingOurs && (
         <View style={{ position: 'absolute', left: 16, right: 16, bottom: 28 }}>
           <Button
             label={
@@ -1258,11 +1305,22 @@ function ProgressBar({ position, duration, onSeek, big }: { position: number; du
         <Text style={[styles.muted, { fontSize: big ? 15 : 12 }]}>{formatClock(position)}</Text>
         {duration > 0 && (
           <Text style={[styles.muted, { fontSize: big ? 15 : 12 }]}>
-            −{formatClock(duration - position)} {t.left}
+            −{formatClock(duration - position)}
           </Text>
         )}
       </View>
     </View>
+  )
+}
+
+/** The Cast icon (shows connecting/connected state) with our own tap action instead of the SDK's sheet. */
+function CastIcon({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Cast" onPress={onPress} hitSlop={12}>
+      <View pointerEvents="none">
+        <CastButton style={{ width: ICON_SIZE, height: ICON_SIZE, tintColor: colors.text }} />
+      </View>
+    </Pressable>
   )
 }
 
