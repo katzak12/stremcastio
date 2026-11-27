@@ -797,6 +797,12 @@ function Main() {
   // ---------- remote control (full screen while casting) ----------
 
   const [remoteOpen, setRemoteOpen] = useState(false)
+  /** Show the remote. Close-then-open with a short delay: iOS ignores a modal presented while an alert or the
+   *  TV picker is still closing, which left remoteOpen stuck on true with nothing on screen. */
+  const openRemote = useCallback(() => {
+    setRemoteOpen(false)
+    setTimeout(() => setRemoteOpen(true), 450)
+  }, [])
   const [sheet, setSheet] = useState<'audio' | 'subs' | null>(null)
   // Whatever the TV is playing (e.g. after the app was closed and reopened, when we no longer know the stream).
   const tvMeta = mediaStatus?.mediaInfo?.metadata as { title?: string; images?: { url: string }[] } | undefined
@@ -822,7 +828,7 @@ function Main() {
     const key = stream?.url ?? tvContentUrl ?? null
     if (playingNow && key && autoOpenedFor.current !== key) {
       autoOpenedFor.current = key
-      setRemoteOpen(true)
+      openRemote()
     }
     // Close it when playback has really ended (not during a quick reload for sync or audio).
     if (playingNow) return
@@ -850,7 +856,7 @@ function Main() {
       return
     }
     Alert.alert(device?.friendlyName ?? 'TV', undefined, [
-      ...(playingNow ? [{ text: t.openRemote, onPress: () => setRemoteOpen(true) }] : []),
+      ...(playingNow ? [{ text: t.openRemote, onPress: openRemote }] : []),
       { text: t.stopCasting, style: 'destructive' as const, onPress: stopCasting },
       { text: t.cancel, style: 'cancel' as const },
     ])
@@ -917,7 +923,6 @@ function Main() {
               <View style={{ gap: 8 }}>
                 {(audioTracksForStream.length > 1 || (fileAudio.loading && fileAudio.url === stream.url)) && (
                   <OptionRow
-                    icon="🔊"
                     title={t.audio}
                     value={fileAudio.loading && fileAudio.url === stream.url ? t.audioLoading : chosenAudio ? audioTrackLabel(chosenAudio) : ''}
                     loading={fileAudio.loading && fileAudio.url === stream.url}
@@ -925,7 +930,6 @@ function Main() {
                   />
                 )}
                 <OptionRow
-                  icon="💬"
                   title={t.subtitlesTitle}
                   value={search.status === 'searching' ? t.searching : selected ? subtitleName(selected) : t.noSubtitle}
                   loading={search.status === 'searching'}
@@ -1099,7 +1103,6 @@ function Main() {
               <View style={{ gap: 10 }}>
                 {isPlayingOurs && audioTracksForStream.length > 1 && chosenAudio ? (
                   <Section
-                    icon="🔊"
                     title={t.audio}
                     value={audioTrackLabel(chosenAudio)}
                     open={remoteSection === 'audio'}
@@ -1116,7 +1119,6 @@ function Main() {
                   </Section>
                 ) : audioTracks.length > 1 && activeAudio !== undefined ? (
                   <Section
-                    icon="🔊"
                     title={t.audio}
                     value={audioTracks.find((tr) => tr.id === activeAudio)?.name ?? ''}
                     open={remoteSection === 'audio'}
@@ -1135,7 +1137,6 @@ function Main() {
 
                 {isPlayingOurs && (
                   <Section
-                    icon="💬"
                     title={t.subtitlesTitle}
                     value={selected && subtitlesOn ? subtitleName(selected) : t.off}
                     open={remoteSection === 'subs'}
@@ -1166,7 +1167,6 @@ function Main() {
 
                 {nextUp.status !== 'idle' && (
                   <Section
-                    icon="⏭"
                     title={t.upNext}
                     value={nextUp.label ?? ''}
                     open={remoteSection === 'next'}
@@ -1181,13 +1181,12 @@ function Main() {
                     {nextUp.status === 'notfound' && <Text style={styles.muted}>{t.nextNotFound}</Text>}
                     {nextUp.status === 'noaddon' && <Text style={styles.muted}>{t.nextNeedsAddon}</Text>}
                     {nextUp.status === 'ready' && (
-                      <Button label={`⏭ ${t.playNow}`} small onPress={() => client?.queueNext()} />
+                      <Button label={t.playNow} small onPress={() => client?.queueNext()} />
                     )}
                   </Section>
                 )}
 
                 <Section
-                  icon="🌙"
                   title={t.sleepTimer}
                   value={
                     typeof sleep === 'number' && sleepEndsAt
@@ -1236,7 +1235,7 @@ function Main() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t.openRemote}
-          onPress={() => setRemoteOpen(true)}
+          onPress={openRemote}
           style={{
             position: 'absolute',
             left: 16,
@@ -1262,12 +1261,12 @@ function Main() {
               {!playingNow
                 ? t.reconnecting
                 : isPlayingOurs && chosenAudio
-                  ? `🔊 ${audioTrackLabel(chosenAudio)}`
+                  ? `${t.audio}: ${audioTrackLabel(chosenAudio)}`
                   : `${t.casting} ${device?.friendlyName ?? 'TV'}`}
             </Text>
             {isPlayingOurs && (
               <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
-                💬 {selected && subtitlesOn ? subtitleName(selected) : t.off}
+                {t.subtitlesTitle}: {selected && subtitlesOn ? subtitleName(selected) : t.off}
               </Text>
             )}
           </View>
@@ -1407,36 +1406,51 @@ function VideoInfo({ stream, details }: { stream: StreamInfo; details: MediaDeta
 /** Tap anywhere on the bar to jump there. */
 function ProgressBar({ position, duration, onSeek, big }: { position: number; duration: number; onSeek: (p: number) => void; big?: boolean }) {
   const bar = big ? 10 : 6
-  const knob = big ? 22 : 14
+  const knob = big ? 24 : 16
   const [width, setWidth] = useState(0)
-  const progress = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0
+  // While dragging, show where you are going; seek once on release.
+  const [dragPos, setDragPos] = useState<number | null>(null)
+  const shown = dragPos ?? position
+  const progress = duration > 0 ? Math.min(1, Math.max(0, shown / duration)) : 0
+  const toPos = (x: number) => (width > 0 ? Math.min(1, Math.max(0, x / width)) * duration : 0)
   return (
     <View style={{ gap: 6 }}>
-      <Pressable
-        disabled={duration <= 0}
+      {/* The whole 48-pt high strip reacts, not just the thin bar; children don't take touches,
+          so locationX is always measured from the strip's left edge. */}
+      <View
         onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-        onPress={(e) => width > 0 && onSeek((e.nativeEvent.locationX / width) * duration)}
-        hitSlop={{ top: 14, bottom: 14 }}
-        style={{ height: bar, borderRadius: bar / 2, backgroundColor: '#2C303C', justifyContent: 'center' }}
+        onStartShouldSetResponder={() => duration > 0}
+        onMoveShouldSetResponder={() => duration > 0}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={(e) => setDragPos(toPos(e.nativeEvent.locationX))}
+        onResponderMove={(e) => setDragPos(toPos(e.nativeEvent.locationX))}
+        onResponderRelease={(e) => {
+          onSeek(toPos(e.nativeEvent.locationX))
+          setDragPos(null)
+        }}
+        onResponderTerminate={() => setDragPos(null)}
+        style={{ height: 48, justifyContent: 'center' }}
       >
-        <View pointerEvents="none" style={{ width: `${progress * 100}%`, height: bar, borderRadius: bar / 2, backgroundColor: colors.accent }} />
+        <View pointerEvents="none" style={{ height: bar, borderRadius: bar / 2, backgroundColor: '#2C303C' }}>
+          <View style={{ width: `${progress * 100}%`, height: bar, borderRadius: bar / 2, backgroundColor: colors.accent }} />
+        </View>
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            left: Math.max(0, progress * width - knob / 2),
-            width: knob,
-            height: knob,
-            borderRadius: knob / 2,
+            left: Math.max(0, Math.min(width - knob, progress * width - knob / 2)),
+            width: dragPos != null ? knob + 6 : knob,
+            height: dragPos != null ? knob + 6 : knob,
+            borderRadius: (knob + 6) / 2,
             backgroundColor: colors.text,
           }}
         />
-      </Pressable>
+      </View>
       <View style={[styles.row, { justifyContent: 'space-between' }]}>
-        <Text style={[styles.muted, { fontSize: big ? 15 : 12 }]}>{formatClock(position)}</Text>
+        <Text style={[styles.muted, { fontSize: big ? 15 : 12 }]}>{formatClock(shown)}</Text>
         {duration > 0 && (
           <Text style={[styles.muted, { fontSize: big ? 15 : 12 }]}>
-            −{formatClock(duration - position)}
+            −{formatClock(duration - shown)}
           </Text>
         )}
       </View>
@@ -1456,7 +1470,7 @@ function CastIcon({ onPress }: { onPress: () => void }) {
 }
 
 /** A tappable line: icon, name, current value, chevron. Opens a menu. */
-function OptionRow({ icon, title, value, onPress, loading }: { icon: string; title: string; value: string; onPress: () => void; loading?: boolean }) {
+function OptionRow({ title, value, onPress, loading }: { title: string; value: string; onPress: () => void; loading?: boolean }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -1466,7 +1480,6 @@ function OptionRow({ icon, title, value, onPress, loading }: { icon: string; tit
         { padding: 12, borderRadius: 12, backgroundColor: '#242733', gap: 10, opacity: pressed ? 0.7 : 1 },
       ]}
     >
-      <Text style={{ fontSize: 18 }}>{icon}</Text>
       <Text style={{ color: colors.text, fontWeight: '600' }}>{title}</Text>
       <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
         {loading && <ActivityIndicator color={colors.accent} size="small" />}
@@ -1480,11 +1493,10 @@ function OptionRow({ icon, title, value, onPress, loading }: { icon: string; tit
 }
 
 /** A line that unfolds its options in place (used inside the remote). */
-function Section(props: { icon: string; title: string; value: string; open: boolean; onToggle: () => void; children: ReactNode }) {
+function Section(props: { title: string; value: string; open: boolean; onToggle: () => void; children: ReactNode }) {
   return (
     <View style={{ borderRadius: 12, backgroundColor: '#1B1E27', overflow: 'hidden' }}>
       <Pressable accessibilityRole="button" onPress={props.onToggle} style={[styles.row, { padding: 14, gap: 10 }]}>
-        <Text style={{ fontSize: 18 }}>{props.icon}</Text>
         <Text style={{ color: colors.text, fontWeight: '600' }}>{props.title}</Text>
         <Text style={[styles.muted, { flex: 1, textAlign: 'right' }]} numberOfLines={1}>
           {props.value}

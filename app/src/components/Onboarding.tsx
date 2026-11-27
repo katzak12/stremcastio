@@ -47,7 +47,7 @@ export function Onboarding({ visible, settings, onChange, onDone }: Props) {
         <ScrollView contentContainerStyle={{ padding: 24, gap: 16, flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           {step === 0 && (
             <>
-              <Text style={{ fontSize: 56, textAlign: 'center', marginTop: 24 }}>📺</Text>
+              <View style={{ height: 40 }} />
               <Title text={t.introWelcomeTitle} />
               <Body text={t.introWelcome} />
             </>

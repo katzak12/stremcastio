@@ -131,6 +131,10 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   to the normal path for that video (`rdBroken`). With RD available, no "no sound on TV" warnings. Intro is now 3 steps
   (welcome, languages, how to use); relay + add-on setup only in Settings. **Not verified on hardware**: RD HLS on
   the Chromecast, the HLS path shape, mediaInfos field names (taken from Go client libs; RD docs host unreachable).
+- 0.4.1: Guus wants **no emoji in the UI** (text labels instead; the header gear stays). "Open remote" and tapping
+  the bar did nothing: iOS drops a Modal presented while an Alert/the TV picker is closing, leaving remoteOpen stuck
+  true. Always open via `openRemote()` (set false, then true after 450 ms). Seek bar: 48-pt touch strip, drag with
+  live preview, seeks on release, keeps the touch from the ScrollView (onResponderTerminationRequest false).
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap
