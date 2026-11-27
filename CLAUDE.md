@@ -112,6 +112,10 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   Subtitles incl. sync, Up next, Sleep timer), Stop at the bottom. After a brief disconnect (app back from background)
   the bar stays for up to 20 s with "Reconnecting…" instead of switching to the Cast button.
   Guus dislikes unrequested layout changes: change only what he asks.
+- 0.3.1: remote's bottom button is "Stop casting" (ends the session). 0.3.2: own relay per user: "Deploy to
+  Cloudflare" button (README + Settings → Relay, `lib/relaySetup.ts`, deploys `worker/` from this repo; Cloudflare
+  provisions the KV itself). When the app becomes active after that and the clipboard holds a *.workers.dev address
+  that answers /health, it offers to use it.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap

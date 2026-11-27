@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { sameMediaUrl } from '../src/lib/stream'
+import { findWorkerUrl } from '../src/lib/relaySetup'
 import { audioTrackLabel, chooseAudioTrack, type FileAudioTrack } from '../src/lib/audioTracks'
 
 const track = (t: Partial<FileAudioTrack> & { number: number }): FileAudioTrack => ({
@@ -53,4 +54,11 @@ test('sameMediaUrl ignores how iOS re-encodes the relay URL', () => {
   assert.ok(sameMediaUrl(sent, sent))
   assert.ok(!sameMediaUrl(sent, 'https://relay.dev/media?u=https://cdn.test/other.mkv&p=120.32,300.1'))
   assert.ok(!sameMediaUrl(null, sent))
+})
+
+test('findWorkerUrl picks the relay address out of copied text', () => {
+  assert.equal(findWorkerUrl('https://stremcastio-relay.guus.workers.dev'), 'https://stremcastio-relay.guus.workers.dev')
+  assert.equal(findWorkerUrl('Visit https://Relay-1.Acct.workers.dev/health now'), 'https://relay-1.acct.workers.dev')
+  assert.equal(findWorkerUrl('https://example.com'), null)
+  assert.equal(findWorkerUrl(null), null)
 })
