@@ -99,6 +99,13 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   counts as playing when we loaded it ourselves (`weCast`) and the TV hasn't reported IDLE FINISHED/CANCELLED and the
   session is still connected, whatever URL comes back. Settings → Info shows version/build and diagnostics
   (TV state, TV URL, URL we sent, why "ours" is yes/no): ask Guus for a screenshot of it if casting UI misbehaves.
+- 0.2.9 (Guus: 0.2.8 works, "echt top"): only our remote remains: the SDK's expanded controller is off
+  (`expandedController: false` in app.json) and the Cast icon is wrapped (`CastIcon`, pointerEvents none on the native
+  button) so a tap while connected shows our own choice (open remote / stop casting) instead of the SDK sheet with a
+  volume slider. Subtitles can be switched mid-film in the remote (re-cast at the same position; "Off" just hides the
+  track). Sleep timer moved to the bottom; "left" dropped from the time. `weCast` no longer resets on a dropped
+  connection (happens when the app returns from the background); when the app knows no stream (restarted), the bar
+  and remote show what the TV reports (title/poster from mediaInfo.metadata).
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions
