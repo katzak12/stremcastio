@@ -769,6 +769,14 @@ function Main() {
     const others = activeIds.filter((x) => x !== SUBTITLE_TRACK_ID)
     client?.setActiveTrackIds(subtitlesOn ? others : [SUBTITLE_TRACK_ID, ...others]).catch(() => {})
   }
+  /** Stop the video on the TV and disconnect. */
+  const stopCasting = () => {
+    GoogleCast.getSessionManager().endCurrentSession(true).catch(() => {})
+    setWeCast(null)
+    setBarGrace(false)
+    setRemoteOpen(false)
+  }
+
   /** Our own tap on the cast icon: the SDK's own sheet (volume slider, its own player) is not used. */
   const onCastIconPress = () => {
     if (!connected) {
@@ -777,15 +785,7 @@ function Main() {
     }
     Alert.alert(device?.friendlyName ?? 'TV', undefined, [
       ...(playingNow ? [{ text: t.openRemote, onPress: () => setRemoteOpen(true) }] : []),
-      {
-        text: t.stopCasting,
-        style: 'destructive' as const,
-        onPress: () => {
-          GoogleCast.getSessionManager().endCurrentSession(true).catch(() => {})
-          setWeCast(null)
-          setRemoteOpen(false)
-        },
-      },
+      { text: t.stopCasting, style: 'destructive' as const, onPress: stopCasting },
       { text: t.cancel, style: 'cancel' as const },
     ])
   }
@@ -1148,7 +1148,7 @@ function Main() {
                 </Section>
               </View>
 
-              <Button label={`■  ${t.stop}`} onPress={() => client?.stop()} />
+              <Button label={t.stopCasting} onPress={stopCasting} />
             </ScrollView>
           </SafeAreaView>
         </Modal>
