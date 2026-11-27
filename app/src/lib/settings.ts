@@ -3,6 +3,7 @@ import Constants from 'expo-constants'
 import { useCallback, useEffect, useState } from 'react'
 import { normalizeLook, STANDARD_LOOK, type SubtitleBackground, type SubtitleColor, type SubtitleEdge, type SubtitleFont, type SubtitleLook } from './cast'
 import { withEnglishFirst } from './languages'
+import type { RdAuth } from './realDebrid'
 import { OPENSUBTITLES_ADDON } from './subtitles'
 
 export type Settings = {
@@ -27,6 +28,8 @@ export type Settings = {
   audioLanguage: string
   /** The introduction (first-run setup) has been seen. */
   onboarded: boolean
+  /** A linked Real-Debrid account (device-code flow). Not needed when streams come from Torrentio with RD. */
+  rdAuth: RdAuth | null
 }
 
 const KEY = 'stremcastio.settings.v1'
@@ -49,6 +52,7 @@ export function defaultSettings(): Settings {
     autoNext: true,
     audioLanguage: '',
     onboarded: false,
+    rdAuth: null,
   }
 }
 
