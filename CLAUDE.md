@@ -95,6 +95,10 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
 - 0.2.7: the now-playing bar/remote never showed with an audio track picked: the app compared the URL the TV reports
   with the relay URL it sent by exact string, and iOS re-encodes it. Now `sameMediaUrl` (stream.ts) compares decoded
   forms, also checks contentId and the last URL we loaded.
+- 0.2.8: with 0.2.7 the now-playing bar still didn't show on Guus's LG, so URL matching alone isn't it. Now a stream
+  counts as playing when we loaded it ourselves (`weCast`) and the TV hasn't reported IDLE FINISHED/CANCELLED and the
+  session is still connected, whatever URL comes back. Settings → Info shows version/build and diagnostics
+  (TV state, TV URL, URL we sent, why "ours" is yes/no): ask Guus for a screenshot of it if casting UI misbehaves.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions
