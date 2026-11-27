@@ -33,6 +33,9 @@ export type Settings = {
 }
 
 const KEY = 'stremcastio.settings.v1'
+/** The shared relay older versions used by default. Kept only for installs that already relied on it;
+ *  new installs make their own relay (introduction / Settings → Relay). */
+const LEGACY_SHARED_RELAY = 'https://stremcastio-relay.stremcastio-relay.workers.dev'
 
 
 export function defaultSettings(): Settings {
@@ -65,8 +68,8 @@ export async function loadSettings(): Promise<Settings> {
     return {
       ...defaults,
       ...saved,
-      // An empty relay in storage falls back to the build-time default.
-      relayUrl: saved.relayUrl || defaults.relayUrl,
+      // Saved settings without a relay come from an older version that used the shared relay.
+      relayUrl: saved.relayUrl || defaults.relayUrl || LEGACY_SHARED_RELAY,
       addons: saved.addons?.length ? saved.addons : defaults.addons,
       languages: withEnglishFirst(saved.languages ?? []),
       ...lookToSettings(

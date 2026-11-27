@@ -27,8 +27,8 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   Logging in on account.apple.com also failed. The password in 1Password may be outdated, or Apple rate-limited the account.
   **Solved 2026-11-25**: after resetting the Apple password, Sideloadly installed Codemagic build #2 on the iPhone
   (trusted developer + Developer Mode on). Free Apple ID: the app expires after 7 days, re-install via Sideloadly.
-- Relay is **deployed** (2026-11-25) at https://stremcastio-relay.stremcastio-relay.workers.dev (KV binding SUBS).
-  The URL is the default in `app/app.json` (`extra.relayUrl`); it can also be changed in the app's settings screen.
+- Guus's relay is **deployed** (2026-11-25) at https://stremcastio-relay.stremcastio-relay.workers.dev (KV binding SUBS).
+  Since 0.5.0 it is no longer the default for new installs (every user deploys their own; see 0.5.0 below).
   Redeploy: `cd worker && npx wrangler deploy` (needs CLOUDFLARE_API_TOKEN). For CI deploys, relay.yml still needs the
   GitHub secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 - Features added 2026-11-25 (not yet tested on the phone): UI in English by default, app language picker
@@ -135,6 +135,11 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   the bar did nothing: iOS drops a Modal presented while an Alert/the TV picker is closing, leaving remoteOpen stuck
   true. Always open via `openRemote()` (set false, then true after 450 ms). Seek bar: 48-pt touch strip, drag with
   live preview, seeks on release, keeps the touch from the ScrollView (onResponderTerminationRequest false).
+- 0.5.0 (Guus: plan for ~100 users, "own relay by default"): no shared relay for new installs. app.json
+  extra.relayUrl is empty and the "bake in RELAY_URL" CI steps are gone. Installs from before keep Guus's relay via
+  LEGACY_SHARED_RELAY in settings.ts (saved settings without relayUrl). The intro (4 steps) has a relay step with the
+  Deploy to Cloudflare button (useOwnRelay fills the address in). Without a relay the main screen shows a "Relay"
+  card with the same button, and casting works without subtitles. README explains the per-user relay.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap
