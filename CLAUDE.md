@@ -27,8 +27,8 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   Logging in on account.apple.com also failed. The password in 1Password may be outdated, or Apple rate-limited the account.
   **Solved 2026-11-25**: after resetting the Apple password, Sideloadly installed Codemagic build #2 on the iPhone
   (trusted developer + Developer Mode on). Free Apple ID: the app expires after 7 days, re-install via Sideloadly.
-- Guus's relay is **deployed** (2026-11-25) at https://stremcastio-relay.stremcastio-relay.workers.dev (KV binding SUBS).
-  Since 0.5.0 it is no longer the default for new installs (every user deploys their own; see 0.5.0 below).
+- Guus's relay is **deployed** at https://stremcastio-relay.stremcastio-relay.workers.dev (KV binding SUBS) and is the
+  shared default (app.json extra.relayUrl). Since 0.5.1 it runs with MEDIA_PROXY=off (subtitles only; see 0.5.1).
   Redeploy: `cd worker && npx wrangler deploy` (needs CLOUDFLARE_API_TOKEN). For CI deploys, relay.yml still needs the
   GitHub secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 - Features added 2026-11-25 (not yet tested on the phone): UI in English by default, app language picker
@@ -140,6 +140,13 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   LEGACY_SHARED_RELAY in settings.ts (saved settings without relayUrl). The intro (4 steps) has a relay step with the
   Deploy to Cloudflare button (useOwnRelay fills the address in). Without a relay the main screen shows a "Relay"
   card with the same button, and casting works without subtitles. README explains the per-user relay.
+- 0.5.1 (Guus: "think hard, a fix that works for everyone and doesn't hurt me"): REVERTED 0.5.0's own-relay-by-default.
+  Reasoning: the free Cloudflare plan never bills (limit = requests fail for the day); the real risk to Guus was
+  films passing through his account via /media. So the shared relay is the default again (zero setup, 3-step intro)
+  but subtitles-only: wrangler.toml `MEDIA_PROXY = "off"` → /media returns 403, /tracks returns url '' for tracks
+  that would need a patch, /health reports media:false. /vtt responses are cached (Cache API). Other audio tracks /
+  TrueHD go via the viewer's Real-Debrid; without RD, the app only lists tracks it can deliver (default or with a URL).
+  Own relay stays optional (Settings), can set MEDIA_PROXY=on. Deployed to Guus's worker 2026-11-27.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap
