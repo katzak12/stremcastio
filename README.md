@@ -57,20 +57,25 @@ Step-by-step instructions (Dutch and English): [INSTALL.md](INSTALL.md).
 
 You can also open `stremcastio://cast?url=<stream>&sub=<subtitle>` from Shortcuts or other apps.
 
-## Your relay (one time, free, about 3 minutes)
+## The relay (nothing to set up)
 
-Subtitles need a small converter, the relay. Every user runs their own, free, so nobody depends on someone
-else's server and no shared server has to carry everyone. The app's introduction walks you through it:
+Subtitles need a small converter, the relay: Chromecast only shows WebVTT served with CORS. The app uses a shared
+relay by default, so there is nothing to set up. It only converts subtitles (and reads a file's track list):
+video never passes through it (`MEDIA_PROXY = "off"` in `worker/wrangler.toml`). Converted subtitles are cached.
+It runs on Cloudflare's free plan, which never bills: if it ever hits the daily limit (100,000 requests; a viewer
+needs a few per film), it simply stops for the rest of that day.
+
+Choosing another spoken language, or playing TrueHD/DTS audio, goes through the viewer's own Real-Debrid
+(the key in a Torrentio link, or Settings → Real-Debrid), not through the relay.
+
+**Your own relay (optional).** For independence, deploy your own copy, free, in about 3 minutes:
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/katzak12/stremcastio/tree/main/worker)
 
-Log in (a free Cloudflare and GitHub account), tap **Deploy** (Cloudflare copies `worker/` to your GitHub,
-creates the storage it needs and deploys it), then copy the address ending in `.workers.dev` and go back to the
-app: it checks the address and fills it in. The same button is under **Settings → Relay**. Without a relay you can
-still cast, just without subtitles.
-
-The free tier allows 100,000 requests a day; one person needs a few per film. Choosing another spoken language
-uses Real-Debrid when available, so films normally don't pass through the relay.
+Log in (a free Cloudflare and GitHub account), tap **Deploy**, then copy the address ending in `.workers.dev` and go
+back to the app: it checks the address and fills it in (same button under **Settings → Relay**). On your own relay
+you can set `MEDIA_PROXY = "on"` to also switch audio tracks for viewers without Real-Debrid (the film then passes
+through your relay).
 
 ## Build it yourself
 

@@ -101,10 +101,14 @@ function Main() {
   // Audio tracks inside the file (MKV), read via the relay. The chosen track decides what we cast.
   const [fileAudio, setFileAudio] = useState<{ url: string; loading: boolean; tracks: FileAudioTrack[] }>({ url: '', loading: false, tracks: [] })
   const [audioPick, setAudioPick] = useState<number | null>(null)
-  const audioTracksForStream = stream && fileAudio.url === stream.url ? fileAudio.tracks : []
+  const rdKnown = !!stream && (!!settings?.rdAuth || !!rdKeyFromStreamUrl(stream.url))
+  // Tracks we can deliver: the file's own default, a relay link, or anything when Real-Debrid can convert it.
+  const audioTracksForStream =
+    stream && fileAudio.url === stream.url ? fileAudio.tracks.filter((tr) => rdKnown || !!tr.url) : []
   const chosenAudio =
     audioTracksForStream.find((tr) => tr.number === audioPick) ?? chooseAudioTrack(audioTracksForStream, settings?.audioLanguage)
-  const castUrl = chosenAudio?.url ?? stream?.url
+  // Identifies the chosen audio (used to re-cast when it changes); the actual URL comes from playbackTarget().
+  const castUrl = chosenAudio?.url || (chosenAudio ? `${stream?.url}#audio=${chosenAudio.number}` : stream?.url)
   const tvContentUrl = mediaStatus?.mediaInfo?.contentUrl || mediaStatus?.mediaInfo?.contentId
   // The URL we last sent to the TV for this stream (direct, or via the relay for an audio track).
   const lastCastUrl = useRef<{ stream: string; url: string } | null>(null)
@@ -295,7 +299,7 @@ function Main() {
     const isDefault = !chosenAudio || chosenAudio.isDefault
     const silentByName = tracks.length === 0 && !!unsupportedAudio(stream.filename)
     const wantRd = rdAvailable && rdBroken.current !== stream.url && ((chosenAudio && (!isDefault || !chosenAudio.playable)) || silentByName)
-    if (!wantRd) return chosenAudio ? { url: chosenAudio.url, contentType: stream.contentType } : original
+    if (!wantRd) return chosenAudio?.url ? { url: chosenAudio.url, contentType: stream.contentType } : original
     try {
       const token = settings?.rdAuth
         ? await freshToken(settings.rdAuth, (a) => update({ rdAuth: a }))
@@ -325,7 +329,7 @@ function Main() {
     } catch {
       // fall back below
     }
-    return chosenAudio ? { url: chosenAudio.url, contentType: stream.contentType } : original
+    return chosenAudio?.url ? { url: chosenAudio.url, contentType: stream.contentType } : original
   }
 
   // The TV sometimes starts loading and then gives up (slow source on the first request).

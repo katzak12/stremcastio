@@ -206,3 +206,23 @@ test('/media refuses requests without a valid patch list', async () => {
   const res = await worker.fetch(new Request('https://relay.test/media?u=https://cdn.test/m.mkv'), {})
   assert.equal(res.status, 400)
 })
+
+test('with MEDIA_PROXY off, /media is refused and /tracks only links the default track', async () => {
+  const fake = serveFile(buildMkv())
+  try {
+    const env = { MEDIA_PROXY: 'off' }
+    const res = await worker.fetch(new Request('https://relay.test/tracks?u=https://cdn.test/m.mkv'), env)
+    const data = (await res.json()) as { audio: { number: number; url: string }[] }
+    assert.deepEqual(data.audio.map((a) => [a.number, a.url]), [
+      [2, 'https://cdn.test/m.mkv'],
+      [3, ''],
+      [4, ''],
+    ])
+    const media = await worker.fetch(new Request('https://relay.test/media?u=https://cdn.test/m.mkv&p=1.32'), env)
+    assert.equal(media.status, 403)
+    const health = (await (await worker.fetch(new Request('https://relay.test/health'), env)).json()) as { media: boolean }
+    assert.equal(health.media, false)
+  } finally {
+    fake.restore()
+  }
+})

@@ -6,3 +6,8 @@ compatibility_date = "2026-11-01"
 [[kv_namespaces]]
 binding = "SUBS"
 id = "213531438d9e478c8e52a1d197a291da"
+
+# "off": no video passes through this relay, only subtitles (another audio track then uses the user's
+# Real-Debrid). Set to "on" on a personal relay to keep the fallback for users without Real-Debrid.
+[vars]
+MEDIA_PROXY = "off"

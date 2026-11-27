@@ -32,6 +32,16 @@ import {
 export interface Env {
   /** Optional KV namespace for /upload. Without it, /upload returns 501. */
   SUBS?: KVNamespace
+  /**
+   * "off" (the default in wrangler.toml): /media is disabled, so no video ever passes through this account;
+   * only subtitles do. Choosing another audio track then goes through the user's Real-Debrid instead.
+   * Set to "on" on a personal relay to keep the header-patch fallback for users without Real-Debrid.
+   */
+  MEDIA_PROXY?: string
+}
+
+function mediaEnabled(env: Env): boolean {
+  return (env.MEDIA_PROXY ?? 'on').toLowerCase() !== 'off'
 }
 
 const MAX_BYTES = 8 * 1024 * 1024
@@ -188,7 +198,7 @@ export async function readTracks(src: string): Promise<MkvTrack[] | null> {
   return null
 }
 
-async function handleTracks(url: URL): Promise<Response> {
+async function handleTracks(url: URL, media: boolean): Promise<Response> {
   const src = httpUrl(url.searchParams.get('u'))
   if (!src) return json({ error: 'Missing or invalid ?u=' }, 400)
   const tracks = await readTracks(src.toString())
@@ -207,7 +217,8 @@ async function handleTracks(url: URL): Promise<Response> {
         channels: t.channels,
         isDefault: t === tvDefault,
         playable: isPlayableAudioCodec(t.codec),
-        url: patches.length ? `${url.origin}/media?${params}` : src.toString(),
+        // Without /media, tracks that need a patched header get no URL: the app uses Real-Debrid for those.
+        url: patches.length ? (media ? `${url.origin}/media?${params}` : '') : src.toString(),
       }
     })
   const subtitles = tracks
@@ -324,18 +335,33 @@ export function applyPatches(bytes: Uint8Array, base: number, patches: Patch[]):
   }
 }
 
+/** The same subtitle asked again (another viewer, a reload for sync) comes from Cloudflare's cache. */
+async function cachedVtt(req: Request, url: URL, ctx?: ExecutionContext): Promise<Response> {
+  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default
+  if (req.method === 'GET' && cache) {
+    const hit = await cache.match(req)
+    if (hit) return hit
+  }
+  const res = await handleVtt(url)
+  if (req.method === 'GET' && cache && res.ok) ctx?.waitUntil(cache.put(req, res.clone()))
+  return res
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(req.url)
     try {
       if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
-      if (url.pathname === '/vtt' && (req.method === 'GET' || req.method === 'HEAD')) return await handleVtt(url)
+      if (url.pathname === '/vtt' && (req.method === 'GET' || req.method === 'HEAD')) return await cachedVtt(req, url, ctx)
       if (url.pathname === '/upload' && req.method === 'POST') return await handleUpload(req, url, env)
       if (url.pathname.startsWith('/s/') && req.method === 'GET') return await handleStored(url.pathname, env)
-      if (url.pathname === '/tracks' && req.method === 'GET') return await handleTracks(url)
-      if (url.pathname === '/media' && (req.method === 'GET' || req.method === 'HEAD')) return await handleMedia(req, url, ctx)
+      if (url.pathname === '/tracks' && req.method === 'GET') return await handleTracks(url, mediaEnabled(env))
+      if (url.pathname === '/media' && (req.method === 'GET' || req.method === 'HEAD')) {
+        if (!mediaEnabled(env)) return json({ error: 'Video proxying is turned off on this relay' }, 403)
+        return await handleMedia(req, url, ctx)
+      }
       if (url.pathname === '/' || url.pathname === '/health') {
-        return json({ name: 'stremcastio-relay', ok: true, uploads: Boolean(env.SUBS), audioTracks: true })
+        return json({ name: 'stremcastio-relay', ok: true, uploads: Boolean(env.SUBS), audioTracks: true, media: mediaEnabled(env) })
       }
       return json({ error: 'Not found' }, 404)
     } catch (err) {
