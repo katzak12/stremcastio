@@ -30,6 +30,8 @@ export type Settings = {
   onboarded: boolean
   /** A linked Real-Debrid account (device-code flow). Not needed when streams come from Torrentio with RD. */
   rdAuth: RdAuth | null
+  /** The Torrentio-style add-on seen in the last debrid stream link (for the Stremio button). */
+  detectedAddon: string | null
 }
 
 const KEY = 'stremcastio.settings.v1'
@@ -53,6 +55,7 @@ export function defaultSettings(): Settings {
     audioLanguage: '',
     onboarded: false,
     rdAuth: null,
+    detectedAddon: null,
   }
 }
 

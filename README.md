@@ -57,6 +57,13 @@ Step-by-step instructions (Dutch and English): [INSTALL.md](INSTALL.md).
 
 You can also open `stremcastio://cast?url=<stream>&sub=<subtitle>` from Shortcuts or other apps.
 
+## Cast button in Stremio
+
+The relay also serves a tiny Stremio add-on that adds **Cast to TV** to every stream: tap it and StremCastio opens
+with that stream, ready to cast. The app offers it under **Settings → Cast button in Stremio** (and on the empty
+start screen): it builds the install link from your own Torrentio configuration (taken from a Torrentio stream you
+cast, or pasted), so the relay stores nothing. Each stream entry opens `stremcastio://cast?url=…`.
+
 ## The relay (nothing to set up)
 
 Subtitles need a small converter, the relay: Chromecast only shows WebVTT served with CORS. The app uses a shared

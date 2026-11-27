@@ -1,7 +1,9 @@
 import * as Clipboard from 'expo-clipboard'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import Constants from 'expo-constants'
+import * as Linking from 'expo-linking'
+import { ActivityIndicator, Alert, AppState, Image, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import GoogleCast, {
   CastButton,
   CastState,
@@ -17,6 +19,7 @@ import GoogleCast, {
 } from 'react-native-google-cast'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { Onboarding } from './components/Onboarding'
+import { StremioAddonCard } from './components/StremioAddonCard'
 import { useOwnRelay } from './components/useOwnRelay'
 import { SettingsModal } from './components/SettingsModal'
 import { Badge, Button, Card, Chips, colors, styles } from './components/ui'
@@ -34,6 +37,8 @@ import { clearResume, getResume, saveResume } from './lib/resume'
 import { getSyncOffset, saveSyncOffset, syncKey } from './lib/syncMemory'
 import { lookFromSettings, useSettings } from './lib/settings'
 import { describeStream, extractUrl, sameMediaUrl, type StreamInfo } from './lib/stream'
+import { pickAddonBase } from './lib/stremioAddon'
+import { checkForUpdate, type Update } from './lib/updates'
 import { lookupImdbId, rankSubtitles, searchSubtitles, stremioVideoId, type SubtitleOption } from './lib/subtitles'
 
 type SearchState = { status: 'idle' | 'searching' | 'done'; message?: string }
@@ -145,11 +150,37 @@ function Main() {
     }
   }, [stream, imdbLookup])
 
+  // ---------- a copied link, and app updates ----------
+
+  // When the app comes to the front with a link on the clipboard, offer to cast it. On iOS we only ask
+  // whether there is a URL (no paste prompt); the native paste button then reads it with the user's tap.
+  const [clipHasUrl, setClipHasUrl] = useState(false)
+  useEffect(() => {
+    const check = async () => {
+      try {
+        if (Platform.OS === 'ios') setClipHasUrl(await Clipboard.hasUrlAsync())
+        else setClipHasUrl(!!extractUrl(await Clipboard.getStringAsync()))
+      } catch {
+        setClipHasUrl(false)
+      }
+    }
+    check()
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && check())
+    return () => sub.remove()
+  }, [])
+
+  const [updateInfo, setUpdateInfo] = useState<Update | null>(null)
+  useEffect(() => {
+    checkForUpdate(Constants.expoConfig?.version ?? '0').then(setUpdateInfo)
+  }, [])
+
   // ---------- incoming streams ----------
 
   const acceptStream = useCallback((url: string, subs: SubtitleOption[] = [], title?: string, keep?: Partial<StreamInfo>) => {
     const described = describeStream(url)
     const info = keep ? { ...described, ...keep } : described
+    const seenAddon = addonFromStreamUrl(url)
+    if (seenAddon) update({ detectedAddon: seenAddon })
     setStream(title && !info.season ? { ...info, title } : info)
     setAltSearch('idle')
     setIncomingSubs(subs)
@@ -163,7 +194,7 @@ function Main() {
     setAudioPick(null)
     setWeCast(null)
     preparedFor.current = null
-  }, [])
+  }, [update])
 
   // Forget "we cast this" when the TV stops or finishes the video. Not on a dropped connection: that also
   // happens for a moment when the app comes back from the background.
@@ -914,6 +945,47 @@ function Main() {
           </Card>
         )}
 
+        {updateInfo && (
+          <Card title={t.updateAvailable.replace('{v}', updateInfo.version)}>
+            <View style={styles.row}>
+              <Button label={t.howToUpdate} kind="primary" small onPress={() => Linking.openURL(updateInfo.url).catch(() => {})} />
+              <Button label={t.later} small onPress={() => setUpdateInfo(null)} />
+            </View>
+          </Card>
+        )}
+
+        {clipHasUrl && !playingNow && (
+          <Card title={t.clipboardFound}>
+            <View style={styles.row}>
+              {Platform.OS === 'ios' && Clipboard.isPasteButtonAvailable ? (
+              <Clipboard.ClipboardPasteButton
+                acceptedContentTypes={['plain-text', 'url']}
+                displayMode="iconAndLabel"
+                cornerStyle="capsule"
+                backgroundColor={colors.accent}
+                foregroundColor="#FFFFFF"
+                style={{ height: 44, width: 150 }}
+                onPress={(data) => {
+                  setClipHasUrl(false)
+                  if (data.type === 'text') acceptText(data.text)
+                }}
+              />
+              ) : (
+                <Button
+                  label={t.pasteLink}
+                  kind="primary"
+                  small
+                  onPress={async () => {
+                    setClipHasUrl(false)
+                    acceptText(await Clipboard.getStringAsync())
+                  }}
+                />
+              )}
+              <Button label="✕" small onPress={() => setClipHasUrl(false)} />
+            </View>
+          </Card>
+        )}
+
         {/* ---------- video ---------- */}
         <Card title={t.videoTitle}>
           {stream ? (
@@ -1242,6 +1314,13 @@ function Main() {
           <Card title={t.howTo}>
             <Text style={styles.muted}>{Platform.OS === 'android' ? t.howToAndroid : t.howToIos}</Text>
           </Card>
+        )}
+        {!stream && (
+          <StremioAddonCard
+            relayUrl={settings.relayUrl}
+            base={pickAddonBase({ detected: settings.detectedAddon, added: settings.streamAddons })}
+            onAddAddon={(u) => update({ streamAddons: [...new Set([...settings.streamAddons, u])] })}
+          />
         )}
       </ScrollView>
 

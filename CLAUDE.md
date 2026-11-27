@@ -150,6 +150,15 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
 - 0.5.2: intro is 4 steps: welcome, "What you need" (Stremio + Torrentio + debrid, same Wi-Fi, iOS Local Network
   permission = "Allow" or the TV is never found, Real-Debrid makes languages/TrueHD work), languages, how to use.
   INSTALL.md (NL+EN) got the same "What you need" section.
+- 0.6.0: (1) Stremio add-on on the relay (`worker/src/stremio.ts`): /stremio/{base64url(torrentio base)}/manifest.json
+  and /stream/{type}/{id}.json → fetches the user's Torrentio streams and returns them with
+  externalUrl `stremcastio://cast?url=…&title=filename` (max 20, cached 10 min). App: `StremioAddonCard` (Settings,
+  empty start screen, intro's last step) builds stremio:// install link from settings.detectedAddon (saved from the
+  last Torrentio debrid link via addonFromStreamUrl) or streamAddons; else asks to paste the Torrentio link.
+  **Not verified**: whether Stremio on iOS opens externalUrl with a custom scheme, and whether Torrentio accepts
+  requests from Cloudflare Workers. (2) Clipboard banner: on app start/foreground, iOS `hasUrlAsync` (no paste
+  prompt) → card with the native paste button. (3) Update banner: `lib/updates.ts` checks GitHub latest release
+  every 12 h, compares with expoConfig.version. Items 4/5 (report button, per-series subtitle memory) in ROADMAP.md.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Roadmap
