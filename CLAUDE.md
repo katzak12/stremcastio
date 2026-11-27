@@ -106,6 +106,12 @@ Guus (GitHub: katzak12). Speaks Dutch: reply in Dutch. He uses an **iPhone** (iO
   track). Sleep timer moved to the bottom; "left" dropped from the time. `weCast` no longer resets on a dropped
   connection (happens when the app returns from the background); when the app knows no stream (restarted), the bar
   and remote show what the TV reports (title/poster from mediaInfo.metadata).
+- 0.3.0 (Guus: less clutter, "everything under its own tab"): main screen shows the video plus two `OptionRow`s
+  (Audio, Subtitles) that open a `Sheet` (pageSheet modal) with the options; the link text field only shows without a
+  stream. The remote: progress, transport, speed chips right below, then `Section`s that unfold in place (Audio,
+  Subtitles incl. sync, Up next, Sleep timer), Stop at the bottom. After a brief disconnect (app back from background)
+  the bar stays for up to 20 s with "Reconnecting…" instead of switching to the Cast button.
+  Guus dislikes unrequested layout changes: change only what he asks.
 - Not yet verified on real hardware: casting with subtitles end-to-end, the Android intent-extras bridge, and whether Stremio passes subtitles.
 
 ## Conventions

@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard'
 import { StatusBar } from 'expo-status-bar'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import GoogleCast, {
   CastButton,
@@ -731,10 +731,23 @@ function Main() {
   // ---------- remote control (full screen while casting) ----------
 
   const [remoteOpen, setRemoteOpen] = useState(false)
+  const [sheet, setSheet] = useState<'audio' | 'subs' | null>(null)
   // Whatever the TV is playing (e.g. after the app was closed and reopened, when we no longer know the stream).
   const tvMeta = mediaStatus?.mediaInfo?.metadata as { title?: string; images?: { url: string }[] } | undefined
   const tvActive = connected && !!mediaStatus?.mediaInfo && playerState != null && playerState !== MediaPlayerState.IDLE
   const playingNow = isPlayingOurs || tvActive
+  // Coming back from the background, the connection drops for a moment: keep the bar for a while.
+  const [barGrace, setBarGrace] = useState(false)
+  useEffect(() => {
+    if (playingNow) {
+      setBarGrace(true)
+      return
+    }
+    if (!barGrace) return
+    const timer = setTimeout(() => setBarGrace(false), 20000)
+    return () => clearTimeout(timer)
+  }, [playingNow, barGrace])
+  const showBar = playingNow || (barGrace && castState !== CastState.NO_DEVICES_AVAILABLE)
   const nowTitle = isPlayingOurs ? (details?.name ?? stream?.title) : (tvMeta?.title ?? stream?.title ?? 'TV')
   const nowPoster = isPlayingOurs ? details?.poster : tvMeta?.images?.[0]?.url
   const autoOpenedFor = useRef<string | null>(null)
@@ -777,6 +790,12 @@ function Main() {
     ])
   }
   const playbackRate = mediaStatus?.playbackRate ?? 1
+  const [remoteSection, setRemoteSection] = useState<'audio' | 'subs' | 'next' | 'sleep' | null>(null)
+  const toggleSection = (k: 'audio' | 'subs' | 'next' | 'sleep') => setRemoteSection((cur) => (cur === k ? null : k))
+  const subtitleName = (o: SubtitleOption) => {
+    const what = o.source === 'stremio' ? t.fromStremio : langName(o.lang)
+    return o.key === 'custom' ? t.customSub : what
+  }
   const seekBy = (sec: number) => client?.seek({ position: sec, relative: true }).catch(() => {})
 
   if (!settings) {
@@ -814,25 +833,6 @@ function Main() {
           {stream ? (
             <View style={{ gap: 10 }}>
               <VideoInfo stream={stream} details={details} />
-              {fileAudio.loading && fileAudio.url === stream.url && (
-                <View style={styles.row}>
-                  <ActivityIndicator color={colors.accent} size="small" />
-                  <Text style={styles.muted}>{t.audioLoading}</Text>
-                </View>
-              )}
-              {audioTracksForStream.length > 1 && chosenAudio && (
-                <View style={{ gap: 8 }}>
-                  <Text style={styles.muted}>{t.audio}</Text>
-                  <Chips
-                    options={audioTracksForStream.map((tr) => ({
-                      value: tr.number,
-                      label: `${audioTrackLabel(tr)}${tr.playable ? '' : ` · ${t.audioNoSound}`}`,
-                    }))}
-                    value={chosenAudio.number}
-                    onChange={pickAudio}
-                  />
-                </View>
-              )}
               {badAudio && (
                 <View style={[styles.selectRow, { gap: 8, borderColor: colors.warn }]}>
                   <Text style={{ color: colors.warn }}>{t.audioUnsupported.replace('{codec}', badAudio)}</Text>
@@ -848,6 +848,24 @@ function Main() {
                   {altSearch === 'noaddon' && <Text style={styles.muted}>{t.dolbyNeedsAddon}</Text>}
                 </View>
               )}
+              <View style={{ gap: 8 }}>
+                {(audioTracksForStream.length > 1 || (fileAudio.loading && fileAudio.url === stream.url)) && (
+                  <OptionRow
+                    icon="🔊"
+                    title={t.audio}
+                    value={fileAudio.loading && fileAudio.url === stream.url ? t.audioLoading : chosenAudio ? audioTrackLabel(chosenAudio) : ''}
+                    loading={fileAudio.loading && fileAudio.url === stream.url}
+                    onPress={() => setSheet('audio')}
+                  />
+                )}
+                <OptionRow
+                  icon="💬"
+                  title={t.subtitlesTitle}
+                  value={search.status === 'searching' ? t.searching : selected ? subtitleName(selected) : t.noSubtitle}
+                  loading={search.status === 'searching'}
+                  onPress={() => setSheet('subs')}
+                />
+              </View>
             </View>
           ) : (
             <Text style={styles.muted}>{t.noVideo}</Text>
@@ -873,6 +891,7 @@ function Main() {
               />
             )}
           </View>
+          {!stream && (
           <TextInput
             style={styles.input}
             placeholder={t.orTypeLink}
@@ -885,14 +904,16 @@ function Main() {
             onSubmitEditing={() => acceptText(linkInput)}
             returnKeyType="go"
           />
+          )}
         </Card>
 
-        {/* ---------- subtitles ---------- */}
-        {stream && (
-          <Card
-            title={t.subtitlesTitle}
-            right={search.status === 'done' ? <Button label={t.searchAgain} kind="ghost" small onPress={runSearch} /> : undefined}
-          >
+        {/* ---------- audio / subtitle menus ---------- */}
+        <Sheet
+          visible={sheet === 'subs'}
+          title={t.subtitlesTitle}
+          onClose={() => setSheet(null)}
+          right={search.status === 'done' ? <Button label={t.searchAgain} kind="ghost" small onPress={runSearch} /> : undefined}
+        >
             {search.status === 'searching' && (
               <View style={styles.row}>
                 <ActivityIndicator color={colors.accent} />
@@ -903,7 +924,10 @@ function Main() {
 
             <SubtitleRow
               active={selectedKey === NONE}
-              onPress={() => setSelectedKey(NONE)}
+              onPress={() => {
+                setSelectedKey(NONE)
+                setSheet(null)
+              }}
               lang="—"
               title={t.noSubtitle}
             />
@@ -911,7 +935,10 @@ function Main() {
               <SubtitleRow
                 key={o.key}
                 active={o.key === selectedKey}
-                onPress={() => setSelectedKey(o.key)}
+                onPress={() => {
+                  setSelectedKey(o.key)
+                  setSheet(null)
+                }}
                 lang={o.lang === 'und' ? '?' : o.lang.toUpperCase()}
                 title={o.source === 'stremio' ? `${t.fromStremio}${o.label ? ` · ${o.label}` : ''}` : langName(o.lang)}
                 subtitle={o.source === 'stremio' ? undefined : o.label || o.source}
@@ -933,8 +960,22 @@ function Main() {
                 if (/^https?:\/\//i.test(v.trim())) setSelectedKey('custom')
               }}
             />
-          </Card>
-        )}
+        </Sheet>
+        <Sheet visible={sheet === 'audio'} title={t.audio} onClose={() => setSheet(null)}>
+          {audioTracksForStream.map((tr) => (
+            <SubtitleRow
+              key={tr.number}
+              active={tr.number === chosenAudio?.number}
+              onPress={() => {
+                pickAudio(tr.number)
+                setSheet(null)
+              }}
+              lang={normalizeLang(tr.language) === 'und' ? '?' : normalizeLang(tr.language).toUpperCase()}
+              title={audioTrackLabel(tr)}
+              subtitle={tr.playable ? undefined : t.audioNoSound}
+            />
+          ))}
+        </Sheet>
 
         {/* ---------- full remote in a sheet; the bottom bar shows what plays ---------- */}
         <Modal visible={remoteOpen && connected && playingNow} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setRemoteOpen(false)}>
@@ -982,113 +1023,132 @@ function Main() {
                 <RoundButton label="+30" size={56} onPress={() => seekBy(30)} />
               </View>
 
-              {isPlayingOurs && (
-                <View style={{ gap: 8 }}>
-                  <Text style={styles.muted}>{t.subtitlesTitle}</Text>
-                  <Chips
+              <Chips
+                options={[0.75, 1, 1.25, 1.5].map((r) => ({ value: r, label: `${r}×` }))}
+                value={[0.75, 1, 1.25, 1.5].includes(playbackRate) ? playbackRate : 1}
+                onChange={(r) => client?.setPlaybackRate(r).catch(() => {})}
+                center
+              />
+
+              <View style={{ gap: 10 }}>
+                {isPlayingOurs && audioTracksForStream.length > 1 && chosenAudio ? (
+                  <Section
+                    icon="🔊"
+                    title={t.audio}
+                    value={audioTrackLabel(chosenAudio)}
+                    open={remoteSection === 'audio'}
+                    onToggle={() => toggleSection('audio')}
+                  >
+                    <Chips
+                      options={audioTracksForStream.map((tr) => ({
+                        value: tr.number,
+                        label: `${audioTrackLabel(tr)}${tr.playable ? '' : ` · ${t.audioNoSound}`}`,
+                      }))}
+                      value={chosenAudio.number}
+                      onChange={pickAudio}
+                    />
+                  </Section>
+                ) : audioTracks.length > 1 && activeAudio !== undefined ? (
+                  <Section
+                    icon="🔊"
+                    title={t.audio}
+                    value={audioTracks.find((tr) => tr.id === activeAudio)?.name ?? ''}
+                    open={remoteSection === 'audio'}
+                    onToggle={() => toggleSection('audio')}
+                  >
+                    <Chips
+                      options={audioTracks.map((tr, i) => ({
+                        value: tr.id,
+                        label: tr.name || (tr.language ? langName(tr.language) : `${t.audio} ${i + 1}`),
+                      }))}
+                      value={activeAudio}
+                      onChange={chooseAudio}
+                    />
+                  </Section>
+                ) : null}
+
+                {isPlayingOurs && (
+                  <Section
+                    icon="💬"
+                    title={t.subtitlesTitle}
+                    value={selected && subtitlesOn ? subtitleName(selected) : t.off}
+                    open={remoteSection === 'subs'}
+                    onToggle={() => toggleSection('subs')}
+                  >
+                    <Chips
+                      options={[
+                        { value: NONE, label: t.off },
+                        ...visibleOptions.slice(0, 8).map((o) => ({ value: o.key, label: subtitleName(o) })),
+                      ]}
+                      value={selected && subtitlesOn ? selected.key : NONE}
+                      onChange={pickSubtitle}
+                    />
+                    {selected && subtitlesOn && (
+                      <View style={{ gap: 8 }}>
+                        <Text style={styles.muted}>
+                          {t.syncTitle}: {offsetMs > 0 ? '+' : ''}
+                          {(offsetMs / 1000).toFixed(2)}s{offsetSaved ? ` · ${t.saved}` : ''}
+                        </Text>
+                        <View style={styles.row}>
+                          <Button label={`◀ ${t.earlier}`} small style={{ flex: 1 }} onPress={() => nudgeSync(-SYNC_STEP_MS)} />
+                          <Button label={`${t.later} ▶`} small style={{ flex: 1 }} onPress={() => nudgeSync(SYNC_STEP_MS)} />
+                        </View>
+                      </View>
+                    )}
+                  </Section>
+                )}
+
+                {nextUp.status !== 'idle' && (
+                  <Section
+                    icon="⏭"
+                    title={t.upNext}
+                    value={nextUp.label ?? ''}
+                    open={remoteSection === 'next'}
+                    onToggle={() => toggleSection('next')}
+                  >
+                    {nextUp.status === 'preparing' && (
+                      <View style={styles.row}>
+                        <ActivityIndicator color={colors.accent} size="small" />
+                        <Text style={styles.muted}>{t.preparingNext}</Text>
+                      </View>
+                    )}
+                    {nextUp.status === 'notfound' && <Text style={styles.muted}>{t.nextNotFound}</Text>}
+                    {nextUp.status === 'noaddon' && <Text style={styles.muted}>{t.nextNeedsAddon}</Text>}
+                    {nextUp.status === 'ready' && (
+                      <Button label={`⏭ ${t.playNow}`} small onPress={() => client?.queueNext()} />
+                    )}
+                  </Section>
+                )}
+
+                <Section
+                  icon="🌙"
+                  title={t.sleepTimer}
+                  value={
+                    typeof sleep === 'number' && sleepEndsAt
+                      ? `${t.stopsAt} ${new Date(sleepEndsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : sleep === 'end'
+                        ? t.stopsAfterThis
+                        : t.off
+                  }
+                  open={remoteSection === 'sleep'}
+                  onToggle={() => toggleSection('sleep')}
+                >
+                  <Chips<SleepMode>
                     options={[
-                      { value: NONE, label: t.off },
-                      ...visibleOptions.slice(0, 8).map((o) => {
-                        const what = o.source === 'stremio' ? t.fromStremio : o.label || o.source
-                        const short = what.length > 26 ? `${what.slice(0, 25)}…` : what
-                        return { value: o.key, label: `${o.lang === 'und' ? '?' : o.lang.toUpperCase()} · ${short}` }
-                      }),
+                      { value: 'off', label: t.off },
+                      { value: 'end', label: t.endOfVideo },
+                      { value: 15, label: '15 min' },
+                      { value: 30, label: '30 min' },
+                      { value: 60, label: '60 min' },
+                      { value: 90, label: '90 min' },
                     ]}
-                    value={selected && subtitlesOn ? selected.key : NONE}
-                    onChange={pickSubtitle}
+                    value={sleep}
+                    onChange={chooseSleep}
                   />
-                </View>
-              )}
-
-              {isPlayingOurs && selected && subtitlesOn && (
-                <View style={{ gap: 8 }}>
-                  <Text style={styles.muted}>
-                    {t.syncTitle}: {offsetMs > 0 ? '+' : ''}
-                    {(offsetMs / 1000).toFixed(2)}s{offsetSaved ? ` · ${t.saved}` : ''}
-                  </Text>
-                  <View style={styles.row}>
-                    <Button label={`◀ ${t.earlier}`} small style={{ flex: 1 }} onPress={() => nudgeSync(-SYNC_STEP_MS)} />
-                    <Button label={`${t.later} ▶`} small style={{ flex: 1 }} onPress={() => nudgeSync(SYNC_STEP_MS)} />
-                  </View>
-                </View>
-              )}
-              {audioTracks.length > 1 && activeAudio !== undefined && (
-                <View style={{ gap: 8 }}>
-                  <Text style={styles.muted}>{t.audio}</Text>
-                  <Chips
-                    options={audioTracks.map((tr, i) => ({
-                      value: tr.id,
-                      label: tr.name || (tr.language ? langName(tr.language) : `${t.audio} ${i + 1}`),
-                    }))}
-                    value={activeAudio}
-                    onChange={chooseAudio}
-                  />
-                </View>
-              )}
-              {nextUp.status !== 'idle' && (
-                <View style={[styles.selectRow, { gap: 6 }]}>
-                  <Text style={styles.cardTitle}>{t.upNext}</Text>
-                  {nextUp.label ? <Text style={styles.text}>{nextUp.label}</Text> : null}
-                  {nextUp.status === 'preparing' && (
-                    <View style={styles.row}>
-                      <ActivityIndicator color={colors.accent} size="small" />
-                      <Text style={styles.muted}>{t.preparingNext}</Text>
-                    </View>
-                  )}
-                  {nextUp.status === 'notfound' && <Text style={styles.muted}>{t.nextNotFound}</Text>}
-                  {nextUp.status === 'noaddon' && <Text style={styles.muted}>{t.nextNeedsAddon}</Text>}
-                  {nextUp.status === 'ready' && (
-                    <Button label={`⏭ ${t.playNow}`} small onPress={() => client?.queueNext()} />
-                  )}
-                </View>
-              )}
-              {isPlayingOurs && audioTracksForStream.length > 1 && chosenAudio && (
-                <View style={{ gap: 8 }}>
-                  <Text style={styles.muted}>{t.audio}</Text>
-                  <Chips
-                    options={audioTracksForStream.map((tr) => ({
-                      value: tr.number,
-                      label: `${audioTrackLabel(tr)}${tr.playable ? '' : ` · ${t.audioNoSound}`}`,
-                    }))}
-                    value={chosenAudio.number}
-                    onChange={pickAudio}
-                  />
-                </View>
-              )}
-
-              <View style={{ gap: 8 }}>
-                <Text style={styles.muted}>{t.speed}</Text>
-                <Chips
-                  options={[0.75, 1, 1.25, 1.5].map((r) => ({ value: r, label: `${r}×` }))}
-                  value={[0.75, 1, 1.25, 1.5].includes(playbackRate) ? playbackRate : 1}
-                  onChange={(r) => client?.setPlaybackRate(r).catch(() => {})}
-                />
+                </Section>
               </View>
 
               <Button label={`■  ${t.stop}`} onPress={() => client?.stop()} />
-
-              <View style={{ gap: 8 }}>
-                <Text style={styles.muted}>
-                  {t.sleepTimer}
-                  {typeof sleep === 'number' && sleepEndsAt
-                    ? ` · ${t.stopsAt} ${new Date(sleepEndsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                    : sleep === 'end'
-                      ? ` · ${t.stopsAfterThis}`
-                      : ''}
-                </Text>
-                <Chips<SleepMode>
-                  options={[
-                    { value: 'off', label: t.off },
-                    { value: 'end', label: t.endOfVideo },
-                    { value: 15, label: '15 min' },
-                    { value: 30, label: '30 min' },
-                    { value: 60, label: '60 min' },
-                    { value: 90, label: '90 min' },
-                  ]}
-                  value={sleep}
-                  onChange={chooseSleep}
-                />
-              </View>
             </ScrollView>
           </SafeAreaView>
         </Modal>
@@ -1106,7 +1166,7 @@ function Main() {
         )}
       </ScrollView>
 
-      {playingNow && (!stream || isPlayingOurs) && (
+      {showBar && (!stream || isPlayingOurs || !playingNow) && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t.openRemote}
@@ -1133,11 +1193,15 @@ function Main() {
               {nowTitle}
             </Text>
             <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
-              {isPlayingOurs && chosenAudio ? `🔊 ${audioTrackLabel(chosenAudio)}` : `${t.casting} ${device?.friendlyName ?? 'TV'}`}
+              {!playingNow
+                ? t.reconnecting
+                : isPlayingOurs && chosenAudio
+                  ? `🔊 ${audioTrackLabel(chosenAudio)}`
+                  : `${t.casting} ${device?.friendlyName ?? 'TV'}`}
             </Text>
             {isPlayingOurs && (
               <Text style={[styles.muted, { fontSize: 12 }]} numberOfLines={1}>
-                💬 {selected && subtitlesOn ? (selected.source === 'stremio' ? t.fromStremio : langName(selected.lang)) : t.off}
+                💬 {selected && subtitlesOn ? subtitleName(selected) : t.off}
               </Text>
             )}
           </View>
@@ -1152,7 +1216,7 @@ function Main() {
         </Pressable>
       )}
 
-      {stream && !isPlayingOurs && (
+      {stream && !isPlayingOurs && !(showBar && !playingNow) && (
         <View style={{ position: 'absolute', left: 16, right: 16, bottom: 28 }}>
           <Button
             label={
@@ -1321,6 +1385,67 @@ function CastIcon({ onPress }: { onPress: () => void }) {
         <CastButton style={{ width: ICON_SIZE, height: ICON_SIZE, tintColor: colors.text }} />
       </View>
     </Pressable>
+  )
+}
+
+/** A tappable line: icon, name, current value, chevron. Opens a menu. */
+function OptionRow({ icon, title, value, onPress, loading }: { icon: string; title: string; value: string; onPress: () => void; loading?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        { padding: 12, borderRadius: 12, backgroundColor: '#242733', gap: 10, opacity: pressed ? 0.7 : 1 },
+      ]}
+    >
+      <Text style={{ fontSize: 18 }}>{icon}</Text>
+      <Text style={{ color: colors.text, fontWeight: '600' }}>{title}</Text>
+      <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+        {loading && <ActivityIndicator color={colors.accent} size="small" />}
+        <Text style={[styles.muted, { flexShrink: 1, textAlign: 'right' }]} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
+      <Text style={[styles.muted, { fontSize: 18 }]}>›</Text>
+    </Pressable>
+  )
+}
+
+/** A line that unfolds its options in place (used inside the remote). */
+function Section(props: { icon: string; title: string; value: string; open: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <View style={{ borderRadius: 12, backgroundColor: '#1B1E27', overflow: 'hidden' }}>
+      <Pressable accessibilityRole="button" onPress={props.onToggle} style={[styles.row, { padding: 14, gap: 10 }]}>
+        <Text style={{ fontSize: 18 }}>{props.icon}</Text>
+        <Text style={{ color: colors.text, fontWeight: '600' }}>{props.title}</Text>
+        <Text style={[styles.muted, { flex: 1, textAlign: 'right' }]} numberOfLines={1}>
+          {props.value}
+        </Text>
+        <Text style={[styles.muted, { fontSize: 16 }]}>{props.open ? '⌃' : '⌄'}</Text>
+      </Pressable>
+      {props.open && <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 12 }}>{props.children}</View>}
+    </View>
+  )
+}
+
+/** A menu sliding up from the bottom. */
+function Sheet(props: { visible: boolean; title: string; onClose: () => void; right?: ReactNode; children: ReactNode }) {
+  return (
+    <Modal visible={props.visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={props.onClose}>
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <View style={[styles.row, { justifyContent: 'space-between', padding: 16 }]}>
+          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>{props.title}</Text>
+          <View style={styles.row}>
+            {props.right}
+            <Button label={t.done} kind="ghost" small onPress={props.onClose} />
+          </View>
+        </View>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, gap: 8 }} keyboardShouldPersistTaps="handled">
+          {props.children}
+        </ScrollView>
+      </View>
+    </Modal>
   )
 }
 
