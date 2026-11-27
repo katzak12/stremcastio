@@ -1,3 +1,4 @@
+import Constants from 'expo-constants'
 import { useState } from 'react'
 import { Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -16,9 +17,11 @@ type Props = {
   settings: Settings
   onChange: (patch: Partial<Settings>) => void
   onClose: () => void
+  /** A few lines about the TV connection, to help find casting problems. */
+  diagnostics?: string
 }
 
-export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
+export function SettingsModal({ visible, settings, onChange, onClose, diagnostics }: Props) {
   const [addonInput, setAddonInput] = useState('')
   const [streamAddonInput, setStreamAddonInput] = useState('')
   const [relayInput, setRelayInput] = useState(settings.relayUrl)
@@ -249,6 +252,18 @@ export function SettingsModal({ visible, settings, onChange, onClose }: Props) {
 
           <Card title={t.howTo}>
             <Text style={styles.muted}>{Platform.OS === 'android' ? t.howToAndroid : t.howToIos}</Text>
+          </Card>
+
+          <Card title="Info">
+            <Text style={styles.muted} selectable>
+              StremCastio {Constants.expoConfig?.version ?? '?'}
+              {Platform.OS === 'ios' && Constants.expoConfig?.ios?.buildNumber ? ` (${Constants.expoConfig.ios.buildNumber})` : ''}
+            </Text>
+            {diagnostics ? (
+              <Text style={[styles.muted, { fontSize: 11 }]} selectable>
+                {diagnostics}
+              </Text>
+            ) : null}
           </Card>
         </ScrollView>
       </SafeAreaView>

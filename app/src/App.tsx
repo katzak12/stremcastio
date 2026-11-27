@@ -104,12 +104,15 @@ function Main() {
   const tvContentUrl = mediaStatus?.mediaInfo?.contentUrl || mediaStatus?.mediaInfo?.contentId
   // The URL we last sent to the TV for this stream (direct, or via the relay for an audio track).
   const lastCastUrl = useRef<{ stream: string; url: string } | null>(null)
-  const isPlayingOurs =
+  const tvReportsOurs =
     !!tvContentUrl &&
     !!stream &&
     (sameMediaUrl(tvContentUrl, stream.url) ||
       (lastCastUrl.current?.stream === stream.url && sameMediaUrl(tvContentUrl, lastCastUrl.current.url)) ||
       audioTracksForStream.some((tr) => sameMediaUrl(tr.url, tvContentUrl)))
+  // We cast this stream ourselves and the TV hasn't stopped it: that counts too, whatever URL the TV reports back.
+  const [weCast, setWeCast] = useState<string | null>(null)
+  const isPlayingOurs = !!stream && connected && (tvReportsOurs || weCast === stream.url)
   const position = useStreamPosition(1)
 
   // One IMDb lookup per stream, shared by the subtitle search and the artwork/rating.
@@ -150,8 +153,23 @@ function Main() {
     setLinkInput('')
     setNextUp({ status: 'idle' })
     setAudioPick(null)
+    setWeCast(null)
     preparedFor.current = null
   }, [])
+
+  // Forget "we cast this" when the connection ends or the TV stops/finishes the video.
+  useEffect(() => {
+    if (!connected) setWeCast(null)
+  }, [connected])
+  const tvIdleReason = mediaStatus?.idleReason
+  const tvPlayerState = mediaStatus?.playerState
+  useEffect(() => {
+    if (
+      tvPlayerState === MediaPlayerState.IDLE &&
+      (tvIdleReason === MediaPlayerIdleReason.FINISHED || tvIdleReason === MediaPlayerIdleReason.CANCELLED)
+    )
+      setWeCast(null)
+  }, [tvPlayerState, tvIdleReason])
 
   useEffect(() => {
     if (!stream || !settings?.relayUrl || !isRemote(stream.url)) return
@@ -283,6 +301,7 @@ function Main() {
         setNextUp({ status: 'idle' })
         lastCastUrl.current = { stream: stream.url, url: castUrl ?? stream.url }
         await loadWithRetry(client, request)
+        setWeCast(stream.url)
         loadWatch.current = {
           at: Date.now(),
           startTime,
@@ -609,6 +628,7 @@ function Main() {
     if (nextUp.status !== 'ready' || !sameMediaUrl(tvUrl, nextUp.url)) return
     for (const key of resumeKeys) clearResume(key)
     setStream(nextUp.stream)
+    setWeCast(nextUp.stream.url)
     setIncomingSubs([])
     setFound(nextUp.subtitles)
     setSearch({ status: 'done' })
@@ -1106,7 +1126,18 @@ function Main() {
         </View>
       )}
 
-      <SettingsModal visible={showSettings} settings={settings} onChange={update} onClose={() => setShowSettings(false)} />
+      <SettingsModal
+        visible={showSettings}
+        settings={settings}
+        onChange={update}
+        onClose={() => setShowSettings(false)}
+        diagnostics={[
+          `TV: ${connected ? (device?.friendlyName ?? '?') : '—'} · ${tvPlayerState ?? '—'}${tvIdleReason ? ` (${tvIdleReason})` : ''}`,
+          `TV URL: ${tvContentUrl ? tvContentUrl.slice(0, 90) : '—'}`,
+          `Sent: ${lastCastUrl.current?.url.slice(0, 90) ?? '—'}`,
+          `Ours: ${isPlayingOurs ? 'yes' : 'no'} (url ${tvReportsOurs ? 'match' : 'no match'}, cast ${weCast && weCast === stream?.url ? 'yes' : 'no'})`,
+        ].join('\n')}
+      />
     </SafeAreaView>
   )
 }
