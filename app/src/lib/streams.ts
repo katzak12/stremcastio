@@ -125,3 +125,37 @@ export async function findPlayableAudioStream(opts: {
   const all = await fetchStreams(opts.addons, opts.type, opts.videoId)
   return pickBestStream(all, opts.currentFilename, { requireSupportedAudio: true, excludeUrl: opts.currentUrl })
 }
+
+/**
+ * All streams for a title, best first: cached on debrid first (they start at once), then the add-on's own order
+ * (Torrentio sorts by quality). Audio the TV can't play goes down unless Real-Debrid can convert it.
+ */
+export function rankStreams(streams: AddonStream[], opts: { canFixAudio: boolean }): StreamCandidate[] {
+  return streams
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => !!s.url && /^https?:\/\//i.test(s.url))
+    .map(({ s, i }) => {
+      const text = [s.behaviorHints?.filename, s.title, s.description].filter(Boolean).join(' ')
+      const name = s.name ?? ''
+      let score = -i
+      if (/\+\]/.test(name) || /\[(rd|pm|ad|dl|oc|tb)\+/i.test(name)) score += 1000
+      if (/download/i.test(name) && !/\+/.test(name)) score -= 1000
+      if (!opts.canFixAudio && unsupportedAudio(`${text} ${name}`)) score -= 500
+      const lines = (s.title ?? '').split('\n')
+      return {
+        score,
+        c: {
+          url: s.url!,
+          label: [name.replace(/\s*\n\s*/g, ' '), lines[0]].filter(Boolean).join(' · '),
+          filename: s.behaviorHints?.filename ?? lines[0],
+          bingeGroup: s.behaviorHints?.bingeGroup,
+        } as StreamCandidate,
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.c)
+}
+
+export async function listStreams(addons: string[], type: 'movie' | 'series', id: string, canFixAudio: boolean): Promise<StreamCandidate[]> {
+  return rankStreams(await fetchStreams(addons, type, id), { canFixAudio })
+}

@@ -59,10 +59,11 @@ You can also open `stremcastio://cast?url=<stream>&sub=<subtitle>` from Shortcut
 
 ## Cast button in Stremio
 
-The relay also serves a tiny Stremio add-on that adds **Cast to TV** to every stream: tap it and StremCastio opens
-with that stream, ready to cast. The app offers it under **Settings → Cast button in Stremio** (and on the empty
-start screen): it builds the install link from your own Torrentio configuration (taken from a Torrentio stream you
-cast, or pasted), so the relay stores nothing. Each stream entry opens `stremcastio://cast?url=…`.
+The relay also serves a tiny Stremio add-on (the same install link for everyone: `<relay>/stremio/manifest.json`;
+the app installs it from **Settings → Cast button in Stremio**). It adds one **Cast to TV** entry to every film and
+episode. Tapping it opens `<relay>/open`, a page that hands the title to the app (`stremcastio://pick?type=…&id=…`).
+The app then asks your own stream add-on (Torrentio, remembered from a stream you cast, or pasted once) for streams,
+from the phone, and shows them best first. The relay never talks to Torrentio and never sees a debrid key.
 
 ## The relay (nothing to set up)
 

@@ -20,13 +20,12 @@ export function StremioAddonCard({ relayUrl, base, onAddAddon }: Props) {
   const [input, setInput] = useState('')
   const [copied, setCopied] = useState(false)
   if (!relayUrl) return null
-  const urls = base ? addonInstallUrls(relayUrl, base) : null
+  const urls = addonInstallUrls(relayUrl)
 
   return (
     <Card title={t.stremioButton}>
       <Text style={styles.muted}>{t.stremioButtonHint}</Text>
-      {urls ? (
-        <View style={{ gap: 8 }}>
+      <View style={{ gap: 8 }}>
           <Button
             label={t.addToStremio}
             kind="primary"
@@ -46,8 +45,8 @@ export function StremioAddonCard({ relayUrl, base, onAddAddon }: Props) {
             }}
           />
           {copied && <Text style={[styles.muted, { fontSize: 12 }]}>{t.pasteInStremio}</Text>}
-        </View>
-      ) : (
+      </View>
+      {!base && (
         <View style={{ gap: 8 }}>
           <Text style={[styles.muted, { fontSize: 12 }]}>{t.torrentioLinkHint}</Text>
           <View style={styles.row}>

@@ -32,7 +32,7 @@ import { langName, normalizeLang } from './lib/languages'
 import { fetchDetails, formatClock, formatRuntime, type MediaDetails } from './lib/meta'
 import { freshToken, hlsForAudio, matchRdAudio, rdKeyFromStreamUrl, rdStream, resolveRdId, type RdStream } from './lib/realDebrid'
 import { isRemote, relayVttUrl, uploadLocalSubtitle } from './lib/relay'
-import { addonFromStreamUrl, findEpisodeStream, findPlayableAudioStream, unsupportedAudio } from './lib/streams'
+import { addonFromStreamUrl, findEpisodeStream, findPlayableAudioStream, listStreams, unsupportedAudio, type StreamCandidate } from './lib/streams'
 import { clearResume, getResume, saveResume } from './lib/resume'
 import { getSyncOffset, saveSyncOffset, syncKey } from './lib/syncMemory'
 import { lookFromSettings, useSettings } from './lib/settings'
@@ -221,8 +221,32 @@ function Main() {
     }
   }, [stream, settings?.relayUrl])
 
+  // "Cast to TV" from Stremio: find the streams on the phone (the user's own add-on), let them pick one.
+  const [picker, setPicker] = useState<{
+    status: 'loading' | 'ready' | 'none' | 'noaddon'
+    streams: StreamCandidate[]
+  } | null>(null)
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+  const openStreamPicker = useCallback(async (pick: { type: 'movie' | 'series'; id: string }) => {
+    const s = settingsRef.current
+    const addons = [...(s?.streamAddons ?? []), s?.detectedAddon].filter((a): a is string => !!a)
+    if (addons.length === 0) return setPicker({ status: 'noaddon', streams: [] })
+    setPicker({ status: 'loading', streams: [] })
+    try {
+      const canFixAudio = !!s?.rdAuth || addons.some((a) => /realdebrid=/i.test(a))
+      const streams = await listStreams(addons, pick.type, pick.id, canFixAudio)
+      setPicker({ status: streams.length ? 'ready' : 'none', streams })
+    } catch {
+      setPicker({ status: 'none', streams: [] })
+    }
+  }, [])
+
   useIncoming(
-    useCallback((inc: Incoming) => acceptStream(inc.streamUrl, inc.subtitles, inc.title), [acceptStream]),
+    useCallback(
+      (inc: Incoming) => (inc.pick ? openStreamPicker(inc.pick) : acceptStream(inc.streamUrl, inc.subtitles, inc.title)),
+      [acceptStream, openStreamPicker],
+    ),
   )
 
   const acceptText = (text: string) => {
@@ -1116,6 +1140,29 @@ function Main() {
                 if (/^https?:\/\//i.test(v.trim())) setSelectedKey('custom')
               }}
             />
+        </Sheet>
+        <Sheet visible={!!picker} title={t.chooseStream} onClose={() => setPicker(null)}>
+          {picker?.status === 'loading' && (
+            <View style={styles.row}>
+              <ActivityIndicator color={colors.accent} />
+              <Text style={styles.muted}>{t.lookingForStreams}</Text>
+            </View>
+          )}
+          {picker?.status === 'none' && <Text style={styles.muted}>{t.noStreamsFound}</Text>}
+          {picker?.status === 'noaddon' && <Text style={styles.muted}>{t.pickNeedsAddon}</Text>}
+          {picker?.streams.slice(0, 25).map((c, i) => (
+            <SubtitleRow
+              key={c.url}
+              active={false}
+              onPress={() => {
+                setPicker(null)
+                acceptStream(c.url, [], undefined, c.filename ? { filename: c.filename } : undefined)
+              }}
+              lang={i === 0 ? '1' : String(i + 1)}
+              title={c.label}
+              subtitle={c.filename}
+            />
+          ))}
         </Sheet>
         <Sheet visible={sheet === 'audio'} title={t.audio} onClose={() => setSheet(null)}>
           {audioTracksForStream.map((tr) => (
